@@ -1,34 +1,59 @@
 import { api, type TalkStreamHandlers } from "../api";
 
-interface Turn {
-  role: "user" | "assistant";
-  text: string;
-}
+type MsgItem = { kind: "msg"; role: "user" | "assistant"; text: string };
+type ToolItem = {
+  kind: "tool";
+  id: string;
+  label: string;
+  status: "pending" | "ok" | "err";
+};
+type Item = MsgItem | ToolItem;
 
 const COLLAPSED_KEY = "talk:profile-collapsed";
 const TURNS_KEY = "talk:turns";
 
-function loadTurns(): Turn[] {
+function loadItems(): Item[] {
   try {
     const raw = localStorage.getItem(TURNS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (t): t is Turn =>
-        t &&
-        typeof t === "object" &&
+    const out: Item[] = [];
+    for (const t of parsed) {
+      if (!t || typeof t !== "object") continue;
+      // Legacy shape: { role, text } — normalize to a msg item.
+      if (
+        t.kind === undefined &&
         (t.role === "user" || t.role === "assistant") &&
-        typeof t.text === "string",
-    );
+        typeof t.text === "string"
+      ) {
+        out.push({ kind: "msg", role: t.role, text: t.text });
+        continue;
+      }
+      if (
+        t.kind === "msg" &&
+        (t.role === "user" || t.role === "assistant") &&
+        typeof t.text === "string"
+      ) {
+        out.push({ kind: "msg", role: t.role, text: t.text });
+      } else if (
+        t.kind === "tool" &&
+        typeof t.id === "string" &&
+        typeof t.label === "string" &&
+        (t.status === "pending" || t.status === "ok" || t.status === "err")
+      ) {
+        out.push({ kind: "tool", id: t.id, label: t.label, status: t.status });
+      }
+    }
+    return out;
   } catch {
     return [];
   }
 }
 
-function persistTurns(turns: Turn[]): void {
+function persistItems(items: Item[]): void {
   try {
-    localStorage.setItem(TURNS_KEY, JSON.stringify(turns));
+    localStorage.setItem(TURNS_KEY, JSON.stringify(items));
   } catch {
     // ignore quota / serialization errors
   }
@@ -121,7 +146,7 @@ export async function renderChat(): Promise<HTMLElement> {
     "It can edit the profile and source list directly — you'll see changes here.";
   transcript.appendChild(intro);
 
-  const turns: Turn[] = loadTurns();
+  const items: Item[] = loadItems();
   let activeStream: AbortController | null = null;
 
   const inputRow = document.createElement("div");
@@ -139,17 +164,14 @@ export async function renderChat(): Promise<HTMLElement> {
   inputRow.appendChild(reset);
   chatPanel.appendChild(inputRow);
 
-  const appendMessage = (turn: Turn): HTMLElement => {
+  const appendMessage = (msg: MsgItem): HTMLElement => {
     const div = document.createElement("div");
-    div.className = "chat-msg" + (turn.role === "user" ? " user" : "");
-    div.textContent = turn.text;
+    div.className = "chat-msg" + (msg.role === "user" ? " user" : "");
+    div.textContent = msg.text;
     transcript.appendChild(div);
     div.scrollIntoView({ block: "end" });
     return div;
   };
-
-  // Replay persisted conversation, if any.
-  for (const t of turns) appendMessage(t);
 
   const appendStatus = (text: string): HTMLElement => {
     const pill = document.createElement("div");
@@ -160,49 +182,75 @@ export async function renderChat(): Promise<HTMLElement> {
     return pill;
   };
 
+  // Replay persisted conversation, if any.
+  for (const it of items) {
+    if (it.kind === "msg") {
+      appendMessage(it);
+    } else {
+      const pill = appendStatus(it.label);
+      if (it.status === "ok") pill.classList.add("ok");
+      else if (it.status === "err") pill.classList.add("err");
+    }
+  }
+
   const onSend = (): void => {
     const text = ta.value.trim();
     if (!text || activeStream) return;
-    appendMessage({ role: "user", text });
-    turns.push({ role: "user", text });
-    persistTurns(turns);
+    const userMsg: MsgItem = { kind: "msg", role: "user", text };
+    appendMessage(userMsg);
+    items.push(userMsg);
+    persistItems(items);
     ta.value = "";
     send.disabled = true;
 
     // The backend expects history to end with a user turn — snapshot it now
-    // before we append the assistant placeholder below.
-    const requestHistory = turns.slice();
+    // (messages only, no tool entries) before we append the assistant
+    // placeholder below.
+    const requestHistory = items
+      .filter((it): it is MsgItem => it.kind === "msg")
+      .map(({ role, text }) => ({ role, text }));
 
-    // Push the assistant placeholder into `turns` up-front so partial replies
+    // Push the assistant placeholder into `items` up-front so partial replies
     // are persisted incrementally — a mid-stream reload (or a missing `done`
     // event) still preserves whatever text streamed in.
-    const assistantTurn: Turn = { role: "assistant", text: "" };
-    turns.push(assistantTurn);
-    const assistantEl = appendMessage(assistantTurn);
-    const toolPills = new Map<string, HTMLElement>();
+    const assistantMsg: MsgItem = { kind: "msg", role: "assistant", text: "" };
+    items.push(assistantMsg);
+    const assistantEl = appendMessage(assistantMsg);
+    const toolPills = new Map<string, { el: HTMLElement; item: ToolItem }>();
 
     const dropEmptyAssistant = (): void => {
-      if (turns[turns.length - 1] === assistantTurn && !assistantTurn.text) {
-        turns.pop();
+      if (items[items.length - 1] === assistantMsg && !assistantMsg.text) {
+        items.pop();
         assistantEl.remove();
       }
     };
 
     const handlers: TalkStreamHandlers = {
       onText: (delta) => {
-        assistantTurn.text += delta;
-        assistantEl.textContent = assistantTurn.text;
+        assistantMsg.text += delta;
+        assistantEl.textContent = assistantMsg.text;
         assistantEl.scrollIntoView({ block: "end" });
-        persistTurns(turns);
+        persistItems(items);
       },
       onToolStart: (tool) => {
-        const pill = appendStatus(prettyToolStart(tool.name, tool.input));
-        toolPills.set(tool.id, pill);
+        const label = prettyToolStart(tool.name, tool.input);
+        const toolItem: ToolItem = {
+          kind: "tool",
+          id: tool.id,
+          label,
+          status: "pending",
+        };
+        items.push(toolItem);
+        const pill = appendStatus(label);
+        toolPills.set(tool.id, { el: pill, item: toolItem });
+        persistItems(items);
       },
       onToolEnd: (tool) => {
-        const pill = toolPills.get(tool.tool_use_id);
-        if (pill) {
-          pill.classList.add(tool.ok ? "ok" : "err");
+        const entry = toolPills.get(tool.tool_use_id);
+        if (entry) {
+          entry.item.status = tool.ok ? "ok" : "err";
+          entry.el.classList.add(tool.ok ? "ok" : "err");
+          persistItems(items);
         }
       },
       onProfileChanged: () => {
@@ -210,13 +258,13 @@ export async function renderChat(): Promise<HTMLElement> {
       },
       onDone: () => {
         dropEmptyAssistant();
-        persistTurns(turns);
+        persistItems(items);
         finish();
       },
       onError: (message) => {
         appendStatus(`error: ${message}`).classList.add("err");
         dropEmptyAssistant();
-        persistTurns(turns);
+        persistItems(items);
         finish();
       },
     };
@@ -235,7 +283,7 @@ export async function renderChat(): Promise<HTMLElement> {
       activeStream.abort();
       activeStream = null;
     }
-    turns.length = 0;
+    items.length = 0;
     localStorage.removeItem(TURNS_KEY);
     transcript.replaceChildren(intro);
     send.disabled = false;
