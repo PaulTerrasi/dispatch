@@ -25,17 +25,27 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            Review pull request #${{ github.event.pull_request.number }} in
+            ${{ github.repository }}.
 
-            Review this pull request. Focus on:
-            - Correctness, bugs, and likely regressions
-            - Security issues (injection, auth, secrets, unsafe deserialization)
-            - Adherence to repo conventions in CLAUDE.md (especially: AWS-only
-              deployment, no Pi/SSH/systemd path; storage goes through the
-              `digest.store.Store` interface; Python deps via pyproject + uv.lock)
-            - Tests for new behavior
+            Steps:
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to read
+               the diff. Read surrounding code with `gh` or local files as
+               needed.
+            2. Evaluate the change for:
+               - Correctness, bugs, likely regressions
+               - Security (injection, auth, secrets, unsafe deserialization)
+               - Repo conventions from CLAUDE.md: AWS-only deployment (no
+                 Pi/SSH/systemd path), storage through `digest.store.Store`,
+                 Python deps via pyproject + uv.lock
+               - Test coverage for new behavior
+            3. Post the review by running:
+               `gh pr review ${{ github.event.pull_request.number }} --comment --body-file <file>`
+               where <file> contains a concise markdown summary (findings
+               grouped by severity, file:line references). If there are no
+               material issues, post a short "LGTM — no blocking issues"
+               comment so it is visible the review ran.
 
-            Leave inline review comments on specific lines where useful, and
-            post one overall summary comment. Be concise. Skip nits unless
-            they materially affect readability or correctness.
+            Be concise. Skip nits unless they materially affect readability
+            or correctness.
+          claude_args: '--allowed-tools Bash(gh:*),Bash(git:*),Read,Grep,Glob'
