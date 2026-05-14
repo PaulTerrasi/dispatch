@@ -969,6 +969,12 @@ body.talk-page .toolbar strong {
   letter-spacing: 0.1em;
   color: var(--muted);
 }
+.run-card--curation .run-card-kind {
+  color: var(--teal);
+}
+.run-card--reflection .run-card-kind {
+  color: var(--ink-2);
+}
 .run-card-trigger {
   font-size: 0.9rem;
   margin-top: 2px;
@@ -976,13 +982,6 @@ body.talk-page .toolbar strong {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.run-card--reflection {
-  border-left: 2px solid var(--gold);
-  padding-left: 12px;
-}
-.run-card--reflection .run-card-kind {
-  color: var(--gold);
 }
 
 .run-phase-label {
