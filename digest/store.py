@@ -58,7 +58,7 @@ class Store:
 
     # ---- reflection memory ----
     # Single-writer by construction: reflection drain holds the reflection lock
-    # and the talk phase serializes against it via the same lock.
+    # and the chat phase serializes against it via the same lock.
     def read_reflection_memory(self) -> str:
         if not self.reflection_memory_path.exists():
             return _DEFAULT_REFLECTION_MEMORY

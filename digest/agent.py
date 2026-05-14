@@ -797,10 +797,10 @@ def reflection_options(state: RunState, *, max_turns: int = 20) -> ClaudeAgentOp
     )
 
 
-def build_talk_tools(
+def build_chat_tools(
     state: RunState, profile_changed_q: asyncio.Queue[str]
 ) -> list[SdkMcpTool[Any]]:
-    """Talk-phase tools: same surface as reflection, but each successful write
+    """Chat-phase tools: same surface as reflection, but each successful write
     pushes the tool name onto `profile_changed_q` so the SSE generator can tell
     the PWA to refetch profile.md / sources.yaml. Writes also serialize against
     the hourly reflection job by acquiring `try_acquire_reflection_lock` for the
@@ -850,24 +850,24 @@ def build_talk_tools(
     return tools
 
 
-def talk_options(
+def chat_options(
     state: RunState,
     profile_changed_q: asyncio.Queue[str],
     *,
     max_turns: int = 8,
 ) -> ClaudeAgentOptions:
-    """Options for the conversational 'talk' agent driven from the PWA.
+    """Options for the conversational 'chat' agent driven from the PWA.
 
     Reuses the reflection toolkit but with `include_partial_messages=True` so
     the SDK yields `StreamEvent` deltas we can forward over SSE for live token
     streaming. `max_turns` is small to keep each turn snappy and prevent the
     agent from looping over tools.
     """
-    system = _system_prompt("talk.md")
+    system = _system_prompt("chat.md")
     server = create_sdk_mcp_server(
         name="digest",
         version="0.1.0",
-        tools=build_talk_tools(state, profile_changed_q),
+        tools=build_chat_tools(state, profile_changed_q),
     )
     return ClaudeAgentOptions(
         system_prompt=system,

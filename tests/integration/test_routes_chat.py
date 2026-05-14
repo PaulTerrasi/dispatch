@@ -1,7 +1,7 @@
-"""Tests for the streaming Talk-tab endpoints.
+"""Tests for the streaming Chat-tab endpoints.
 
 We unit-test the SSE serializer + translator and the lock-wrapping behavior
-of `build_talk_tools` directly. The full POST /api/chat/talk flow goes
+of `build_chat_tools` directly. The full POST /api/chat/stream flow goes
 through `claude_agent_sdk.query` (real subprocess), so it's exercised by
 `make smoke-real` rather than here.
 """
@@ -24,10 +24,10 @@ from claude_agent_sdk import (
 )
 from fastapi.testclient import TestClient
 
-from digest.agent import RunState, build_talk_tools
+from digest.agent import RunState, build_chat_tools
 from digest.store import Store
 from server.app import create_app
-from server.routes_talk import _sse, _translate
+from server.routes_chat import _sse, _translate
 
 
 @pytest.fixture
@@ -90,14 +90,14 @@ def test_translate_tool_result_block() -> None:
     assert payload == {"tool_use_id": "t1", "ok": True}
 
 
-# ── build_talk_tools: lock + profile_changed plumbing ──────────────────────
+# ── build_chat_tools: lock + profile_changed plumbing ──────────────────────
 
 
 @pytest.mark.asyncio
-async def test_talk_write_pushes_profile_changed(store: Store) -> None:
+async def test_chat_write_pushes_profile_changed(store: Store) -> None:
     state = RunState(store=store, today=datetime.now(UTC).date())
     q: asyncio.Queue[str] = asyncio.Queue()
-    tools = build_talk_tools(state, q)
+    tools = build_chat_tools(state, q)
     by_name = {t.name: t for t in tools}
 
     # Seed a profile so the diff applies cleanly.
@@ -110,10 +110,10 @@ async def test_talk_write_pushes_profile_changed(store: Store) -> None:
 
 
 @pytest.mark.asyncio
-async def test_talk_write_blocked_by_reflection_lock(store: Store) -> None:
+async def test_chat_write_blocked_by_reflection_lock(store: Store) -> None:
     state = RunState(store=store, today=datetime.now(UTC).date())
     q: asyncio.Queue[str] = asyncio.Queue()
-    tools = build_talk_tools(state, q)
+    tools = build_chat_tools(state, q)
     by_name = {t.name: t for t in tools}
 
     # Reflection holds the lock externally (e.g., the hourly Fargate run).
@@ -144,14 +144,14 @@ def test_profile_endpoint_returns_markdown(client: TestClient, tmp_data_dir: Pat
     assert r.json() == {"markdown": "# Profile\n\n- woodworking\n"}
 
 
-def test_talk_rejects_empty_history(client: TestClient) -> None:
-    r = client.post("/api/chat/talk", json={"history": []})
+def test_chat_rejects_empty_history(client: TestClient) -> None:
+    r = client.post("/api/chat/stream", json={"history": []})
     assert r.status_code == 400
 
 
-def test_talk_requires_user_last(client: TestClient) -> None:
+def test_chat_requires_user_last(client: TestClient) -> None:
     r = client.post(
-        "/api/chat/talk",
+        "/api/chat/stream",
         json={"history": [{"role": "assistant", "text": "hi"}]},
     )
     assert r.status_code == 400

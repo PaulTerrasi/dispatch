@@ -235,7 +235,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/chat/talk": {
+    "/api/chat/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -244,8 +244,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Chat Talk */
-        post: operations["chat_talk_api_chat_talk_post"];
+        /** Chat Stream */
+        post: operations["chat_stream_api_chat_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -277,6 +277,11 @@ export interface components {
         ChatFeedback: {
             /** Text */
             text: string;
+        };
+        /** ChatRequest */
+        ChatRequest: {
+            /** History */
+            history: components["schemas"]["ChatTurn"][];
         };
         /** ChatTurn */
         ChatTurn: {
@@ -502,11 +507,6 @@ export interface components {
             url: string;
             /** Snippet */
             snippet: string;
-        };
-        /** TalkRequest */
-        TalkRequest: {
-            /** History */
-            history: components["schemas"]["ChatTurn"][];
         };
         /** ThumbFeedback */
         ThumbFeedback: {
@@ -866,7 +866,7 @@ export interface operations {
             };
         };
     };
-    chat_talk_api_chat_talk_post: {
+    chat_stream_api_chat_stream_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -875,7 +875,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TalkRequest"];
+                "application/json": components["schemas"]["ChatRequest"];
             };
         };
         responses: {
