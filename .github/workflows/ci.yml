@@ -107,7 +107,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Install CDK CLI
-        run: npm install -g aws-cdk
+        run: npm install -g aws-cdk@2
 
       - name: Synth (no AWS creds required)
         working-directory: infra

@@ -55,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: Install CDK CLI
-        run: npm install -g aws-cdk
+        run: npm install -g aws-cdk@2
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
