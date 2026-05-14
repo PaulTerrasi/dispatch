@@ -68,21 +68,6 @@ export const api = {
     post("/api/feedback", { item_id, value, ...(notes ? { notes } : {}) }).then((r) =>
       jsonOr<{ status: string }>(r, { status: "error" }),
     ),
-  onboardingMessage: (history: { role: "user" | "assistant"; text: string }[]) =>
-    post("/api/onboarding/message", { history }).then((r) =>
-      jsonOr<Schemas["OnboardingResponse"]>(r, {
-        reply: "",
-        proposed_profile: null,
-      }),
-    ),
-  saveProfile: (markdown: string) =>
-    post("/api/onboarding/save", { markdown }).then((r) =>
-      jsonOr<{ status: string }>(r, { status: "error" }),
-    ),
-  profileStatus: () =>
-    get("/api/profile/status").then((r) =>
-      jsonOr<Schemas["ProfileStatus"]>(r, { has_profile: true }),
-    ),
   profile: () => get("/api/profile").then((r) => jsonOr<{ markdown: string }>(r, { markdown: "" })),
   talkStream: (
     history: { role: "user" | "assistant"; text: string }[],

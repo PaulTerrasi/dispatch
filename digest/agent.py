@@ -59,7 +59,6 @@ class RunState:
     reflection_notes: str = ""
     profile_patches_applied: int = 0
     sources_changed: int = 0
-    proposed_profile: str | None = None  # onboarding only
     tool_log: list[dict[str, Any]] = field(default_factory=list)
     current_tools: dict[str, Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]] = field(
         default_factory=dict
@@ -686,22 +685,6 @@ def _compact_curation_runs(runs: list[dict[str, Any]], *, max_bytes: int) -> str
     return "\n".join(blocks)
 
 
-def build_onboarding_tools(state: RunState) -> list[SdkMcpTool[Any]]:
-    @tool(
-        "propose_profile",
-        "Propose a draft profile.md for the user to confirm.",
-        {"markdown": str},
-    )
-    async def _propose(args: dict[str, Any]) -> dict[str, Any]:
-        state.proposed_profile = str(args.get("markdown") or "")
-        state.record("propose_profile", {}, f"{len(state.proposed_profile)} chars")
-        return {"content": [{"type": "text", "text": "draft sent to UI for confirmation."}]}
-
-    tools = [_propose]
-    state.current_tools = {t.name: t.handler for t in tools}
-    return tools
-
-
 # ---------- AgentRunner protocol & impls ------------------------------------
 
 
@@ -811,21 +794,6 @@ def reflection_options(state: RunState, *, max_turns: int = 20) -> ClaudeAgentOp
         max_turns=max_turns,
         permission_mode="bypassPermissions",
         thinking={"type": "adaptive"},
-    )
-
-
-def onboarding_options(state: RunState, *, max_turns: int = 20) -> ClaudeAgentOptions:
-    server = create_sdk_mcp_server(
-        name="digest",
-        version="0.1.0",
-        tools=build_onboarding_tools(state),
-    )
-    return ClaudeAgentOptions(
-        system_prompt=_system_prompt("onboarding.md"),
-        mcp_servers={"digest": server},
-        allowed_tools=["mcp__digest__propose_profile"],
-        max_turns=max_turns,
-        permission_mode="bypassPermissions",
     )
 
 

@@ -4,13 +4,6 @@ import { renderPageHeader, renderTabBar, formatTodayLong } from "./_toolbar";
 export async function renderToday(): Promise<HTMLElement> {
   const root = document.createElement("div");
 
-  // Empty profile → onboarding. Once saved, the user lands here normally.
-  const status = await api.profileStatus();
-  if (!status.has_profile) {
-    location.hash = "/onboarding";
-    return root;
-  }
-
   const items = await api.feed();
   root.appendChild(
     renderPageHeader({
@@ -211,14 +204,10 @@ function renderThumbs(item: DigestItem, card: HTMLElement, onRemoved?: () => voi
       card.remove();
       if (parent) {
         if (runKey && !parent.querySelector(`.item[data-run-key="${cssEscape(runKey)}"]`)) {
-          parent
-            .querySelector(`.run-line[data-run-key="${cssEscape(runKey)}"]`)
-            ?.remove();
+          parent.querySelector(`.run-line[data-run-key="${cssEscape(runKey)}"]`)?.remove();
         }
         if (dateKey && !parent.querySelector(`.item[data-date-key="${cssEscape(dateKey)}"]`)) {
-          parent
-            .querySelector(`.date-line[data-date-key="${cssEscape(dateKey)}"]`)
-            ?.remove();
+          parent.querySelector(`.date-line[data-date-key="${cssEscape(dateKey)}"]`)?.remove();
           parent
             .querySelectorAll(`.run-line[data-date-key="${cssEscape(dateKey)}"]`)
             .forEach((el) => el.remove());
@@ -312,7 +301,9 @@ function formatDate(iso: string): string {
 }
 
 function cssEscape(value: string): string {
-  return typeof CSS !== "undefined" && CSS.escape ? CSS.escape(value) : value.replace(/["\\]/g, "\\$&");
+  return typeof CSS !== "undefined" && CSS.escape
+    ? CSS.escape(value)
+    : value.replace(/["\\]/g, "\\$&");
 }
 
 function hostnameOf(url: string): string {

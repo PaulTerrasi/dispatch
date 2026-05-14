@@ -127,21 +127,6 @@ def test_append_and_read_recent_feedback(store: Store):
     assert kinds == {"thumb", "chat"}
 
 
-def test_is_profile_empty_seed(store: Store):
-    """The default seed file (all bare `-` bullets) counts as empty."""
-    assert store.is_profile_empty() is True
-
-
-def test_is_profile_empty_real_content(store: Store):
-    store.write_profile("# Profile\n\n## Standing interests\n- LLM agents and tool use\n")
-    assert store.is_profile_empty() is False
-
-
-def test_is_profile_empty_only_headings(store: Store):
-    store.write_profile("# Profile\n\n## Standing interests\n## Voice notes\n")
-    assert store.is_profile_empty() is True
-
-
 def test_git_init_and_commit(store: Store):
     store.git_init_if_needed()
     store.write_profile("# Profile\n\n## Standing interests\n- LLMs\n")

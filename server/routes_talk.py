@@ -7,8 +7,7 @@ edit `profile.md` and `sources.yaml` mid-conversation; successful writes
 emit a `profile_changed` SSE so the PWA refetches `GET /api/profile`.
 
 State is fully stateless: history lives in the client and is sent in full
-each turn, just like `/api/onboarding/message`. The Reset button is a
-client-side concern.
+each turn. The Reset button is a client-side concern.
 """
 
 from __future__ import annotations
@@ -36,7 +35,6 @@ from pydantic import BaseModel
 from digest.agent import RunState, SdkAgentRunner, talk_options
 from digest.store_protocol import StoreProtocol
 from server.deps import get_store
-from server.routes_onboarding import ChatTurn, _format_history
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -44,6 +42,19 @@ StoreDep = Annotated[StoreProtocol, Depends(get_store)]
 
 HEARTBEAT_INTERVAL_SECONDS = 10.0
 AGENT_WALL_TIMEOUT_SECONDS = 240.0
+
+
+class ChatTurn(BaseModel):
+    role: str  # "user" | "assistant"
+    text: str
+
+
+def _format_history(history: list[ChatTurn]) -> str:
+    lines: list[str] = []
+    for turn in history:
+        role = "User" if turn.role == "user" else "Assistant"
+        lines.append(f"{role}: {turn.text}")
+    return "\n".join(lines)
 
 
 class TalkRequest(BaseModel):
