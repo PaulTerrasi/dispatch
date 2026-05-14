@@ -31,17 +31,22 @@ from server.config import resolve_ssm_env_vars
 log = structlog.get_logger(__name__)
 
 
+_received_signal: int | None = None
+
+
 async def _run(bucket: str) -> int:
     main_task = asyncio.current_task()
     assert main_task is not None
     loop = asyncio.get_running_loop()
 
-    def _on_signal(signame: str) -> None:
+    def _on_signal(signum: int, signame: str) -> None:
+        global _received_signal
+        _received_signal = signum
         log.warning("fargate.signal_received", signal=signame)
         main_task.cancel()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, _on_signal, sig.name)
+        loop.add_signal_handler(sig, _on_signal, sig.value, sig.name)
 
     summary = await run_once(bucket=bucket)
     print(json.dumps(summary.__dict__, default=str, indent=2))
@@ -71,9 +76,11 @@ def main() -> None:
         exit_code = asyncio.run(_run(bucket))
     except asyncio.CancelledError:
         # SIGTERM/SIGINT propagated; reflect_drain's finally block has already
-        # released the reflection lock if one was held.
-        log.warning("fargate.cancelled")
-        exit_code = 130
+        # released the reflection lock if one was held. Exit 128+signum so
+        # SIGTERM (143) and SIGINT (130) are distinguishable in ECS
+        # task-stopped-reason and CloudWatch alarms.
+        log.warning("fargate.cancelled", signal=_received_signal)
+        exit_code = 128 + _received_signal if _received_signal else 130
     sys.exit(exit_code)
 
 
