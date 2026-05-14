@@ -86,6 +86,9 @@ source = ["server", "digest"]
 omit = ["*/__main__.py"]
 
 [tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
