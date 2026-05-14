@@ -75,10 +75,11 @@ def main() -> None:
     try:
         exit_code = asyncio.run(_run(bucket))
     except asyncio.CancelledError:
-        # SIGTERM/SIGINT propagated; reflect_drain's finally block has already
-        # released the reflection lock if one was held. Exit 128+signum so
-        # SIGTERM (143) and SIGINT (130) are distinguishable in ECS
-        # task-stopped-reason and CloudWatch alarms.
+        # SIGTERM/SIGINT propagated. If cancellation hit during the drain
+        # phase, reflect_drain's finally block already released the lock;
+        # if it hit during curation, no lock was ever acquired. Exit
+        # 128+signum so SIGTERM (143) and SIGINT (130) are distinguishable
+        # in ECS task-stopped-reason and CloudWatch alarms.
         log.warning("fargate.cancelled", signal=_received_signal)
         exit_code = 128 + _received_signal if _received_signal else 130
     sys.exit(exit_code)
