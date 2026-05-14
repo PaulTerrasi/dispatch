@@ -219,8 +219,10 @@ export async function renderChat(): Promise<HTMLElement> {
     const toolPills = new Map<string, { el: HTMLElement; item: ToolItem }>();
 
     const dropEmptyAssistant = (): void => {
-      if (items[items.length - 1] === assistantMsg && !assistantMsg.text) {
-        items.pop();
+      if (assistantMsg.text) return;
+      const idx = items.indexOf(assistantMsg);
+      if (idx !== -1) {
+        items.splice(idx, 1);
         assistantEl.remove();
       }
     };
