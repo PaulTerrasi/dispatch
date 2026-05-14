@@ -10,13 +10,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import structlog
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     SdkMcpTool,
@@ -31,7 +31,7 @@ from digest.tools.rss import fetch_rss
 from digest.tools.web_fetch import web_fetch
 from digest.tools.youtube import fetch_youtube_channel, fetch_youtube_transcript
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
