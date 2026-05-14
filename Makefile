@@ -3,7 +3,7 @@
 # copies inside .venv/ and uv warns about missing RECORD files.
 export UV_PROJECT_ENVIRONMENT := .venv.nosync
 
-.PHONY: install fmt fmt-check lint typecheck test test-py test-pwa test-e2e url check types dev build smoke smoke-real deploy deploy-infra deploy-pwa clean
+.PHONY: install fmt fmt-check lint typecheck test test-py test-pwa test-e2e url check types dev build smoke smoke-real seed-demo deploy deploy-infra deploy-pwa clean
 
 install:
 	uv sync --all-extras
@@ -71,6 +71,9 @@ smoke:
 smoke-real:
 	@test -n "$$CLAUDE_CODE_OAUTH_TOKEN" || (echo "CLAUDE_CODE_OAUTH_TOKEN not set" && exit 1)
 	uv run python -m digest.runner --data-dir ./data
+
+seed-demo:
+	uv run python scripts/seed_demo_data.py --data-dir ./data --force
 
 deploy-infra:
 	cd infra && cdk deploy --require-approval never
