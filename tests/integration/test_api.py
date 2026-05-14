@@ -316,18 +316,6 @@ def test_search_empty_query_returns_empty(client: TestClient):
     assert r.json() == []
 
 
-def test_profile_status_empty_seed(client: TestClient):
-    r = client.get("/api/profile/status")
-    assert r.status_code == 200
-    assert r.json() == {"has_profile": False}
-
-
-def test_profile_status_after_save(client: TestClient, tmp_data_dir: Path):
-    Store(tmp_data_dir).write_profile("# Profile\n\n## Standing interests\n- LLM agents\n")
-    r = client.get("/api/profile/status")
-    assert r.json() == {"has_profile": True}
-
-
 def test_recent_runs(client: TestClient, tmp_data_dir: Path):
     store = _seed_digest(tmp_data_dir)
     store.append_run(

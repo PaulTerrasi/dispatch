@@ -13,7 +13,6 @@ from server.config import auth_token, make_store, resolve_ssm_env_vars, static_d
 from server.middleware import BearerAuthMiddleware
 from server.routes_digest import router as digest_router
 from server.routes_feedback import router as feedback_router
-from server.routes_onboarding import router as onboarding_router
 from server.routes_talk import router as talk_router
 
 configure_logging()
@@ -42,7 +41,6 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix=api_prefix)
     api.include_router(digest_router)
     api.include_router(feedback_router)
-    api.include_router(onboarding_router)
     api.include_router(talk_router)
     app.include_router(api)
 

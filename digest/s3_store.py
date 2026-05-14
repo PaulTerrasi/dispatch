@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 _DEFAULT_PROFILE = """# Profile
 
-> This file is empty. Open the PWA and complete onboarding to populate it,
-> or hand-edit it now. The agent treats your edits as authoritative.
+> This file is empty. Hand-edit it or use the chat tab to populate it.
+> The agent treats your edits as authoritative.
 
 ## Standing interests
 -
@@ -111,22 +111,6 @@ class S3Store:
 
     def write_reflection_memory(self, text: str) -> None:
         self._put("reflection_memory.md", text, "text/markdown")
-
-    def is_profile_empty(self) -> bool:
-        text = self._get("profile.md")
-        if text is None:
-            return True
-        for raw in text.splitlines():
-            line = raw.strip()
-            if not line or line.startswith(("#", ">")):
-                continue
-            if line.startswith("-"):
-                rest = line[1:].strip()
-                if rest:
-                    return False
-            else:
-                return False
-        return True
 
     # ---- sources ----
 

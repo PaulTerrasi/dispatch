@@ -31,14 +31,12 @@ def test_ensure_layout_seeds_defaults(store: S3Store) -> None:
     store.ensure_layout()
     assert "Profile" in store.read_profile()
     assert store.list_sources() == []  # default empty sources file
-    assert store.is_profile_empty() is True
 
 
 def test_profile_round_trip(store: S3Store) -> None:
     store.ensure_layout()
     store.write_profile("# Real profile\n\n## Standing interests\n- ML\n")
     assert "ML" in store.read_profile()
-    assert store.is_profile_empty() is False
 
 
 def test_digest_write_then_read(store: S3Store) -> None:

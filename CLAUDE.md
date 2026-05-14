@@ -52,8 +52,8 @@ automatically via `server.config.make_store()`).
 - Python deps: single source of truth is `pyproject.toml` + `uv.lock`. Both
   `Dockerfile.lambda` and `Dockerfile.fargate` resolve from the lock file via
   `uv export` / `uv sync` — no separate hand-maintained pin files. The API
-  Lambda installs the same runtime deps as Fargate (the `/api/onboarding/*`
-  routes import `digest.agent`, which transitively pulls the curation deps).
+  Lambda installs the same runtime deps as Fargate (the `/api/chat/talk`
+  route imports `digest.agent`, which transitively pulls the curation deps).
 - Two storage backends share a single interface: `digest.store.Store` (filesystem)
   and `digest.s3_store.S3Store`. New code that touches storage must go through
   this interface, not directly with `pathlib` or `boto3`.

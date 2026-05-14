@@ -215,57 +215,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/onboarding/message": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Onboarding Message */
-        post: operations["onboarding_message_api_onboarding_message_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/profile/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Profile Status */
-        get: operations["profile_status_api_profile_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/onboarding/save": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Save Profile */
-        post: operations["save_profile_api_onboarding_save_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/profile": {
         parameters: {
             query?: never;
@@ -310,25 +259,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Root Index */
-        get: operations["root_index__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/{path}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Spa Fallback */
-        get: operations["spa_fallback__path__get"];
+        /** Root Dev */
+        get: operations["root_dev__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -434,27 +366,10 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** OnboardingRequest */
-        OnboardingRequest: {
-            /** History */
-            history: components["schemas"]["ChatTurn"][];
-        };
-        /** OnboardingResponse */
-        OnboardingResponse: {
-            /** Reply */
-            reply: string;
-            /** Proposed Profile */
-            proposed_profile?: string | null;
-        };
         /** ProfileMarkdown */
         ProfileMarkdown: {
             /** Markdown */
             markdown: string;
-        };
-        /** ProfileStatus */
-        ProfileStatus: {
-            /** Has Profile */
-            has_profile: boolean;
         };
         /** RunDetail */
         RunDetail: {
@@ -574,11 +489,6 @@ export interface components {
             exit_reason?: string | null;
             /** Error */
             error?: string | null;
-        };
-        /** SaveProfileRequest */
-        SaveProfileRequest: {
-            /** Markdown */
-            markdown: string;
         };
         /** SearchHit */
         SearchHit: {
@@ -936,94 +846,6 @@ export interface operations {
             };
         };
     };
-    onboarding_message_api_onboarding_message_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OnboardingRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OnboardingResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    profile_status_api_profile_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProfileStatus"];
-                };
-            };
-        };
-    };
-    save_profile_api_onboarding_save_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveProfileRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     read_profile_markdown_api_profile_get: {
         parameters: {
             query?: never;
@@ -1077,7 +899,7 @@ export interface operations {
             };
         };
     };
-    root_index__get: {
+    root_dev__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1092,38 +914,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    spa_fallback__path__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                path: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

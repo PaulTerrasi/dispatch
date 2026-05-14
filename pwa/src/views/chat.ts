@@ -366,4 +366,3 @@ function formatInline(s: string): string {
   // Escape first, then re-introduce inline-code spans.
   return escapeHtml(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 }
-

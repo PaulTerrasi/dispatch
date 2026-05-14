@@ -68,25 +68,6 @@ class Store:
         self.reflection_memory_path.parent.mkdir(parents=True, exist_ok=True)
         self.reflection_memory_path.write_text(text, encoding="utf-8")
 
-    def is_profile_empty(self) -> bool:
-        """Profile counts as empty if every bullet under every section is a
-        bare placeholder ("-" or "- "). Headings and the seed blockquote are
-        ignored. Used to decide whether to route the PWA to onboarding."""
-        if not self.profile_path.exists():
-            return True
-        for raw in self.profile_path.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line or line.startswith(("#", ">")):
-                continue
-            if line.startswith("-"):
-                rest = line[1:].strip()
-                if rest:
-                    return False
-            else:
-                # Any non-bullet, non-heading content counts as a real profile
-                return False
-        return True
-
     # ---- sources ----
     def list_sources(self) -> list[Source]:
         if not self.sources_path.exists():
@@ -392,8 +373,8 @@ class Store:
 
 _DEFAULT_PROFILE = """# Profile
 
-> This file is empty. Open the PWA and complete onboarding to populate it,
-> or hand-edit it now. The agent treats your edits as authoritative.
+> This file is empty. Hand-edit it or use the chat tab to populate it.
+> The agent treats your edits as authoritative.
 
 ## Standing interests
 -

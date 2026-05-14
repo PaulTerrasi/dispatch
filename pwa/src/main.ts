@@ -3,7 +3,6 @@ import { initPullToRefresh } from "./pull-to-refresh";
 import { renderArchive } from "./views/archive";
 import { renderChat } from "./views/chat";
 import { renderDigestDay } from "./views/digest_day";
-import { renderOnboarding } from "./views/onboarding";
 import { renderRunDetail } from "./views/run_detail";
 import { renderRuns } from "./views/runs";
 import { renderToday } from "./views/today";
@@ -37,7 +36,6 @@ startRouter(
     { path: "/today", render: renderToday },
     { path: "/archive", render: renderArchive },
     { path: "/chat", render: renderChat },
-    { path: "/onboarding", render: renderOnboarding },
     { path: "/digest/:date", render: renderDigestDay },
     { path: "/runs", render: renderRuns },
     { path: "/run/:run_id", render: renderRunDetail },
