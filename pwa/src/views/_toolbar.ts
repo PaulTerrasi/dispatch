@@ -40,8 +40,8 @@ export function renderPageHeader(opts: {
 }
 
 /**
- * Fixed bottom tab bar with inline SVG icons. Hidden on the talk page via CSS
- * (talk owns the full viewport). Renders after `main` so it sits above
+ * Fixed bottom tab bar with inline SVG icons. Hidden on the chat page via CSS
+ * (chat owns the full viewport). Renders after `main` so it sits above
  * scrolling content.
  */
 export function renderTabBar(active: TabKey): HTMLElement {
@@ -106,12 +106,12 @@ export function renderToolbar(active: TabKey): HTMLElement {
 
 const ICON_TODAY = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="4"/><path d="M4 14h2M18 14h2M12 6v2M6.6 8.6l1.4 1.4M16 10l1.4-1.4"/><path d="M3 18h18"/></svg>`;
 const ICON_ARCHIVE = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="4" rx="1"/><path d="M5 9v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>`;
-const ICON_TALK = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1Z"/></svg>`;
+const ICON_CHAT = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1Z"/></svg>`;
 const ICON_RUNS = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg>`;
 
 const TABS: Array<{ key: TabKey; label: string; href: string; icon: string }> = [
   { key: "today", label: "Today", href: "#/today", icon: ICON_TODAY },
   { key: "archive", label: "Archive", href: "#/archive", icon: ICON_ARCHIVE },
-  { key: "chat", label: "Chat", href: "#/chat", icon: ICON_TALK },
+  { key: "chat", label: "Chat", href: "#/chat", icon: ICON_CHAT },
   { key: "runs", label: "Runs", href: "#/runs", icon: ICON_RUNS },
 ];

@@ -1,7 +1,7 @@
-"""Talk-tab API: streaming chat agent + live profile read.
+"""Chat-tab API: streaming chat agent + live profile read.
 
-The PWA opens a streaming POST to `/api/chat/talk` with the full conversation
-history; we run a fresh `SdkAgentRunner` with `talk_options` and forward
+The PWA opens a streaming POST to `/api/chat/stream` with the full conversation
+history; we run a fresh `SdkAgentRunner` with `chat_options` and forward
 agent output as SSE events. The agent has the reflection toolkit, so it can
 edit `profile.md` and `sources.yaml` mid-conversation; successful writes
 emit a `profile_changed` SSE so the PWA refetches `GET /api/profile`.
@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from digest.agent import RunState, SdkAgentRunner, talk_options
+from digest.agent import RunState, SdkAgentRunner, chat_options
 from digest.store_protocol import StoreProtocol
 from server.deps import get_store
 
@@ -57,7 +57,7 @@ def _format_history(history: list[ChatTurn]) -> str:
     return "\n".join(lines)
 
 
-class TalkRequest(BaseModel):
+class ChatRequest(BaseModel):
     history: list[ChatTurn]
 
 
@@ -124,7 +124,7 @@ def _translate(msg: Any) -> list[bytes]:
 
 
 async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncIterator[bytes]:
-    """Run the talk agent and yield SSE bytes.
+    """Run the chat agent and yield SSE bytes.
 
     Uses a single `out_queue` as the merge point for three concurrent
     producers: the agent loop, a 10s heartbeat, and the profile-changed
@@ -140,7 +140,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
 
     state = RunState(store=store, today=datetime.now(UTC).date())
     profile_changed_q: asyncio.Queue[str] = asyncio.Queue()
-    options = talk_options(state, profile_changed_q)
+    options = chat_options(state, profile_changed_q)
     runner = SdkAgentRunner()
 
     prompt = (
@@ -179,7 +179,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
         except asyncio.CancelledError:
             raise
         except TimeoutError:
-            log.error("talk.agent_timeout", timeout_s=AGENT_WALL_TIMEOUT_SECONDS)
+            log.error("chat.agent_timeout", timeout_s=AGENT_WALL_TIMEOUT_SECONDS)
             await out_queue.put(
                 _sse(
                     "error",
@@ -193,7 +193,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
             exit_code = getattr(e, "exit_code", None)
             cli_stderr = getattr(e, "stderr", None)
             log.exception(
-                "talk.agent_failed",
+                "chat.agent_failed",
                 error_type=type(e).__name__,
                 exit_code=exit_code,
                 cli_stderr=cli_stderr,
@@ -224,8 +224,8 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
         await asyncio.gather(hb_task, pc_task, agent_task, return_exceptions=True)
 
 
-@router.post("/chat/talk")
-async def chat_talk(store: StoreDep, body: TalkRequest) -> StreamingResponse:
+@router.post("/chat/stream")
+async def chat_stream(store: StoreDep, body: ChatRequest) -> StreamingResponse:
     if not body.history:
         raise HTTPException(status_code=400, detail="history must be non-empty")
     if body.history[-1].role != "user":

@@ -1,12 +1,12 @@
-import { api, type TalkStreamHandlers } from "../api";
+import { api, type ChatStreamHandlers } from "../api";
 
 interface Turn {
   role: "user" | "assistant";
   text: string;
 }
 
-const COLLAPSED_KEY = "talk:profile-collapsed";
-const TURNS_KEY = "talk:turns";
+const COLLAPSED_KEY = "chat:profile-collapsed";
+const TURNS_KEY = "chat:turns";
 
 function loadTurns(): Turn[] {
   try {
@@ -35,52 +35,52 @@ function persistTurns(turns: Turn[]): void {
 }
 
 export async function renderChat(): Promise<HTMLElement> {
-  // The talk page owns the full viewport (both panes always visible, each
+  // The chat page owns the full viewport (both panes always visible, each
   // scrolls independently). Tag the body so CSS can break the `main` 640px
   // cap; remove the tag when the route changes.
-  document.body.classList.add("talk-page");
+  document.body.classList.add("chat-page");
   const cleanupBodyClass = (): void => {
-    document.body.classList.remove("talk-page");
+    document.body.classList.remove("chat-page");
     window.removeEventListener("hashchange", cleanupBodyClass);
   };
   window.addEventListener("hashchange", cleanupBodyClass);
 
   const root = document.createElement("div");
-  root.className = "talk-root";
-  root.appendChild(renderTalkHeader());
+  root.className = "chat-root";
+  root.appendChild(renderChatHeader());
 
   const layout = document.createElement("div");
-  layout.className = "talk-layout";
+  layout.className = "chat-layout";
   root.appendChild(layout);
 
   // ── Chat panel ───────────────────────────────────────────────────────────
   // Chat is the primary child — always full-size. Profile is an overlay on top.
   const chatPanel = document.createElement("div");
-  chatPanel.className = "talk-chat";
+  chatPanel.className = "chat-panel";
   layout.appendChild(chatPanel);
 
   // ── Backdrop (visible only when profile is expanded) ─────────────────────
   const backdrop = document.createElement("div");
-  backdrop.className = "talk-profile-backdrop";
+  backdrop.className = "chat-profile-backdrop";
   backdrop.setAttribute("aria-hidden", "true");
   layout.appendChild(backdrop);
 
   // ── Profile panel (live read of profile.md) ──────────────────────────────
   const profilePanel = document.createElement("aside");
-  profilePanel.className = "talk-profile";
+  profilePanel.className = "chat-profile";
   const profileHeader = document.createElement("button");
   profileHeader.type = "button";
-  profileHeader.className = "talk-profile-header";
+  profileHeader.className = "chat-profile-header";
   const profileLabel = document.createElement("span");
-  profileLabel.className = "talk-profile-label";
+  profileLabel.className = "chat-profile-label";
   profileLabel.textContent = "profile.md";
   const profileToggle = document.createElement("span");
-  profileToggle.className = "talk-profile-toggle";
+  profileToggle.className = "chat-profile-toggle";
   profileToggle.setAttribute("aria-hidden", "true");
   profileHeader.appendChild(profileLabel);
   profileHeader.appendChild(profileToggle);
   const profileBody = document.createElement("div");
-  profileBody.className = "talk-profile-body";
+  profileBody.className = "chat-profile-body";
   profilePanel.appendChild(profileHeader);
   profilePanel.appendChild(profileBody);
   layout.appendChild(profilePanel);
@@ -111,13 +111,13 @@ export async function renderChat(): Promise<HTMLElement> {
   void refreshProfile();
 
   const transcript = document.createElement("div");
-  transcript.className = "talk-transcript";
+  transcript.className = "chat-transcript";
   chatPanel.appendChild(transcript);
 
   const intro = document.createElement("div");
   intro.className = "note";
   intro.textContent =
-    "Talk to the agent about tomorrow's digest. " +
+    "Chat with the agent about tomorrow's digest. " +
     "It can edit the profile and source list directly — you'll see changes here.";
   transcript.appendChild(intro);
 
@@ -125,7 +125,7 @@ export async function renderChat(): Promise<HTMLElement> {
   let activeStream: AbortController | null = null;
 
   const inputRow = document.createElement("div");
-  inputRow.className = "chat-input talk-input";
+  inputRow.className = "chat-input chat-input-bar";
   const ta = document.createElement("textarea");
   ta.placeholder = "more woodworking, less AI hot takes…";
   const send = document.createElement("button");
@@ -153,7 +153,7 @@ export async function renderChat(): Promise<HTMLElement> {
 
   const appendStatus = (text: string): HTMLElement => {
     const pill = document.createElement("div");
-    pill.className = "talk-tool-pill";
+    pill.className = "chat-tool-pill";
     pill.textContent = text;
     transcript.appendChild(pill);
     pill.scrollIntoView({ block: "end" });
@@ -188,7 +188,7 @@ export async function renderChat(): Promise<HTMLElement> {
       }
     };
 
-    const handlers: TalkStreamHandlers = {
+    const handlers: ChatStreamHandlers = {
       onText: (delta) => {
         assistantTurn.text += delta;
         assistantEl.textContent = assistantTurn.text;
@@ -227,7 +227,7 @@ export async function renderChat(): Promise<HTMLElement> {
       ta.focus();
     };
 
-    activeStream = api.talkStream(requestHistory, handlers);
+    activeStream = api.chatStream(requestHistory, handlers);
   };
 
   const onReset = (): void => {
@@ -256,15 +256,15 @@ export async function renderChat(): Promise<HTMLElement> {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function renderTalkHeader(): HTMLElement {
+function renderChatHeader(): HTMLElement {
   const bar = document.createElement("header");
-  bar.className = "toolbar talk-toolbar";
+  bar.className = "toolbar chat-toolbar";
   const title = document.createElement("strong");
   title.textContent = "dispatch chat";
   bar.appendChild(title);
   const back = document.createElement("a");
   back.href = "#/today";
-  back.className = "talk-back";
+  back.className = "chat-back";
   back.textContent = "today ›";
   back.setAttribute("aria-label", "Back to today");
   bar.appendChild(back);

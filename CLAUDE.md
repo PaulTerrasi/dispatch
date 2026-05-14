@@ -6,7 +6,7 @@ This project deploys to **AWS only**, via CDK in `infra/`. There is no Pi,
 SSH, systemd, rsync, or Tailscale path. Do not add one.
 
 - Infrastructure: `infra/app.py` (single `MorningDigestStack`)
-- API runtime: AWS Lambda via AWS Lambda Web Adapter — `Dockerfile.lambda` runs uvicorn on port 8080; LWA bridges the Lambda Runtime API to plain HTTP. The Function URL is configured for `RESPONSE_STREAM` so SSE flows through CloudFront unbuffered (used by the talk-tab chatbot at `/api/chat/talk`).
+- API runtime: AWS Lambda via AWS Lambda Web Adapter — `Dockerfile.lambda` runs uvicorn on port 8080; LWA bridges the Lambda Runtime API to plain HTTP. The Function URL is configured for `RESPONSE_STREAM` so SSE flows through CloudFront unbuffered (used by the chat-tab chatbot at `/api/chat/stream`).
 - Curation runtime: ECS Fargate (`Dockerfile.fargate`, entry `digest.runner_fargate`),
   scheduled hourly by EventBridge Scheduler
 - Storage: S3 data bucket (`MORNING_DIGEST_S3_BUCKET` env var triggers `S3Store`)
@@ -52,7 +52,7 @@ automatically via `server.config.make_store()`).
 - Python deps: single source of truth is `pyproject.toml` + `uv.lock`. Both
   `Dockerfile.lambda` and `Dockerfile.fargate` resolve from the lock file via
   `uv export` / `uv sync` — no separate hand-maintained pin files. The API
-  Lambda installs the same runtime deps as Fargate (the `/api/chat/talk`
+  Lambda installs the same runtime deps as Fargate (the `/api/chat/stream`
   route imports `digest.agent`, which transitively pulls the curation deps).
 - Two storage backends share a single interface: `digest.store.Store` (filesystem)
   and `digest.s3_store.S3Store`. New code that touches storage must go through

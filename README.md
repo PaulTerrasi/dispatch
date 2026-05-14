@@ -13,7 +13,7 @@ See [the design doc](docs/plan.md) for the full architecture.
                          /          \
               S3 (PWA static)        Lambda Function URL (response streaming)
                                      - FastAPI behind AWS Lambda Web Adapter
-                                     - serves /api/* incl. SSE /api/chat/talk
+                                     - serves /api/* incl. SSE /api/chat/stream
                                      - spawns reflection tasks on feedback
 
        EventBridge Scheduler  ──hourly──▶  ECS Fargate task

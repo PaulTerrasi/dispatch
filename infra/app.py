@@ -145,7 +145,7 @@ class MorningDigestStack(cdk.Stack):
             code=lambda_image,
             role=app_role,
             memory_size=1024,
-            # 5-minute cap so a long talk-tab agent turn (with tool calls that
+            # 5-minute cap so a long chat-tab agent turn (with tool calls that
             # may web_fetch) cannot hit the Lambda max. Most invocations finish
             # in seconds.
             timeout=cdk.Duration.minutes(5),

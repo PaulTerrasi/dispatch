@@ -11,9 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from digest.log import configure_logging
 from server.config import auth_token, make_store, resolve_ssm_env_vars, static_dir
 from server.middleware import BearerAuthMiddleware
+from server.routes_chat import router as chat_router
 from server.routes_digest import router as digest_router
 from server.routes_feedback import router as feedback_router
-from server.routes_talk import router as talk_router
 
 configure_logging()
 log = structlog.get_logger(__name__)
@@ -41,7 +41,7 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix=api_prefix)
     api.include_router(digest_router)
     api.include_router(feedback_router)
-    api.include_router(talk_router)
+    api.include_router(chat_router)
     app.include_router(api)
 
     # Mount the built PWA at root if it exists. Falls back to a JSON note so

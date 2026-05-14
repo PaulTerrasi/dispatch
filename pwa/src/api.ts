@@ -69,20 +69,20 @@ export const api = {
       jsonOr<{ status: string }>(r, { status: "error" }),
     ),
   profile: () => get("/api/profile").then((r) => jsonOr<{ markdown: string }>(r, { markdown: "" })),
-  talkStream: (
+  chatStream: (
     history: { role: "user" | "assistant"; text: string }[],
-    handlers: TalkStreamHandlers,
-  ) => talkStream(history, handlers),
+    handlers: ChatStreamHandlers,
+  ) => chatStream(history, handlers),
   runs: () => get("/api/runs").then((r) => jsonOr<RunSummary[]>(r, [])),
   runDetail: (run_id: string) =>
     get(`/api/runs/${run_id}`).then((r) => jsonOr<RunDetail | null>(r, null)),
 };
 
-// ── Talk-tab streaming ───────────────────────────────────────────────────────
+// ── Chat-tab streaming ───────────────────────────────────────────────────────
 // SSE consumed via fetch + ReadableStream because EventSource cannot send the
 // Authorization header. Frame format: `event: <name>\ndata: <json>\n\n`.
 
-export interface TalkStreamHandlers {
+export interface ChatStreamHandlers {
   onText?: (delta: string) => void;
   onToolStart?: (tool: { id: string; name: string; input: unknown }) => void;
   onToolEnd?: (tool: { tool_use_id: string; ok: boolean }) => void;
@@ -91,12 +91,12 @@ export interface TalkStreamHandlers {
   onError?: (message: string) => void;
 }
 
-function talkStream(
+function chatStream(
   history: { role: "user" | "assistant"; text: string }[],
-  handlers: TalkStreamHandlers,
+  handlers: ChatStreamHandlers,
 ): AbortController {
   const ctl = new AbortController();
-  void runTalkStream(history, handlers, ctl.signal).catch((e: unknown) => {
+  void runChatStream(history, handlers, ctl.signal).catch((e: unknown) => {
     if ((e as { name?: string })?.name === "AbortError") return;
     handlers.onError?.((e as Error)?.message ?? "stream failed");
   });
@@ -105,12 +105,12 @@ function talkStream(
 
 const STALL_TIMEOUT_MS = 20_000;
 
-async function runTalkStream(
+async function runChatStream(
   history: { role: "user" | "assistant"; text: string }[],
-  handlers: TalkStreamHandlers,
+  handlers: ChatStreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {
-  const res = await fetch("/api/chat/talk", {
+  const res = await fetch("/api/chat/stream", {
     method: "POST",
     headers: authHeaders({
       "Content-Type": "application/json",
@@ -120,7 +120,7 @@ async function runTalkStream(
     signal,
   });
   if (!res.ok || !res.body) {
-    throw new Error(`talk stream failed: ${res.status} ${res.statusText}`);
+    throw new Error(`chat stream failed: ${res.status} ${res.statusText}`);
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
@@ -148,7 +148,7 @@ async function runTalkStream(
       }
     }
     if (stalled) {
-      throw new Error("talk stream stalled: no server activity for 20s");
+      throw new Error("chat stream stalled: no server activity for 20s");
     }
   } finally {
     if (stallTimer) clearTimeout(stallTimer);
@@ -156,7 +156,7 @@ async function runTalkStream(
   }
 }
 
-function dispatchSseFrame(frame: string, handlers: TalkStreamHandlers): void {
+function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers): void {
   let event = "message";
   let dataLines: string[] = [];
   for (const line of frame.split("\n")) {
