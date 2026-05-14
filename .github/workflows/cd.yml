@@ -52,7 +52,7 @@ jobs:
 
       - name: Install PWA deps
         working-directory: pwa
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Install CDK CLI
         run: npm install -g aws-cdk
@@ -95,7 +95,7 @@ jobs:
 
       - name: Install PWA deps
         working-directory: pwa
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Install Playwright browsers
         working-directory: pwa
@@ -132,7 +132,7 @@ jobs:
         id: ver
         run: |
           base=$(grep -E '^version' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          tag="v${base}+build.${{ github.run_number }}"
+          tag="v${base}.${{ github.run_number }}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Computed tag: $tag"
 
