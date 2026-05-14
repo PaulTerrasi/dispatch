@@ -97,16 +97,12 @@ export function renderDigest(digest: Digest): HTMLElement {
     wrap.appendChild(h);
     const p = document.createElement("p");
     p.className = "note";
-    p.textContent = "Nothing met the bar today. The agent left a note about why — tap below.";
+    p.textContent = "Nothing met the bar today.";
     wrap.appendChild(p);
   }
 
   for (const item of digest.items) {
     wrap.appendChild(renderItem(item));
-  }
-
-  if (digest.agent_notes) {
-    wrap.appendChild(renderAgentNotes(digest.agent_notes));
   }
 
   return wrap;
@@ -282,26 +278,6 @@ function renderThumbs(item: DigestItem, card: HTMLElement, onRemoved?: () => voi
   actions.appendChild(thumbs);
   actions.appendChild(notesEl);
   return actions;
-}
-
-function renderAgentNotes(notes: string): HTMLElement {
-  const wrap = document.createElement("div");
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "notes-toggle";
-  toggle.textContent = "agent notes";
-  toggle.setAttribute("aria-expanded", "false");
-  const body = document.createElement("div");
-  body.className = "notes-body";
-  body.hidden = true;
-  body.textContent = notes;
-  toggle.onclick = () => {
-    body.hidden = !body.hidden;
-    toggle.setAttribute("aria-expanded", body.hidden ? "false" : "true");
-  };
-  wrap.appendChild(toggle);
-  wrap.appendChild(body);
-  return wrap;
 }
 
 function emptyState(text: string): HTMLElement {
