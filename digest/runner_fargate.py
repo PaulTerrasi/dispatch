@@ -81,7 +81,11 @@ def main() -> None:
         # 128+signum so SIGTERM (143) and SIGINT (130) are distinguishable
         # in ECS task-stopped-reason and CloudWatch alarms.
         log.warning("fargate.cancelled", signal=_received_signal)
-        exit_code = 128 + _received_signal if _received_signal else 130
+        # If no signal was recorded, the cancellation came from somewhere
+        # else (e.g. an upstream future). Don't fake a signal exit code —
+        # use generic 1 so CloudWatch alarms keyed on 130/143 don't fire
+        # spuriously.
+        exit_code = 128 + _received_signal if _received_signal is not None else 1
     sys.exit(exit_code)
 
 

@@ -61,6 +61,46 @@ async def test_run_swallows_drain_exception(monkeypatch: pytest.MonkeyPatch) -> 
     assert exit_code == 0
 
 
+def test_main_exits_with_signum_on_signal_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import signal
+
+    monkeypatch.setenv("MORNING_DIGEST_S3_BUCKET", "b")
+    monkeypatch.setattr(runner_fargate, "resolve_ssm_env_vars", lambda: None)
+    monkeypatch.setattr(runner_fargate, "_configure_logging", lambda: None)
+    monkeypatch.setattr(runner_fargate, "_received_signal", signal.SIGTERM.value)
+
+    def fake_run(coro: Any) -> int:
+        coro.close()
+        raise __import__("asyncio").CancelledError()
+
+    monkeypatch.setattr(runner_fargate.asyncio, "run", fake_run)
+
+    with pytest.raises(SystemExit) as exc:
+        runner_fargate.main()
+    assert exc.value.code == 128 + signal.SIGTERM.value  # 143
+
+
+def test_main_exits_with_one_on_non_signal_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MORNING_DIGEST_S3_BUCKET", "b")
+    monkeypatch.setattr(runner_fargate, "resolve_ssm_env_vars", lambda: None)
+    monkeypatch.setattr(runner_fargate, "_configure_logging", lambda: None)
+    monkeypatch.setattr(runner_fargate, "_received_signal", None)
+
+    def fake_run(coro: Any) -> int:
+        coro.close()
+        raise __import__("asyncio").CancelledError()
+
+    monkeypatch.setattr(runner_fargate.asyncio, "run", fake_run)
+
+    with pytest.raises(SystemExit) as exc:
+        runner_fargate.main()
+    assert exc.value.code == 1
+
+
 @pytest.mark.asyncio
 async def test_run_returns_error_when_curation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_once(*, bucket: str) -> RunSummary:
