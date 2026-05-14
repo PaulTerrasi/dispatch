@@ -363,6 +363,36 @@ body.chat-page .tabbar {
   font-size: 0.94rem;
   line-height: 1.5;
 }
+.item .summary {
+  margin: 6px 0 10px 0;
+}
+.item .summary .summary-text {
+  margin: 0;
+}
+.item .summary.is-clamped .summary-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.item .summary-toggle {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.item .summary-toggle:hover {
+  color: var(--coral);
+}
 .item .actions {
   display: flex;
   flex-direction: column;

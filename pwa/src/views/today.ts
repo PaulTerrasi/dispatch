@@ -97,16 +97,12 @@ export function renderDigest(digest: Digest): HTMLElement {
     wrap.appendChild(h);
     const p = document.createElement("p");
     p.className = "note";
-    p.textContent = "Nothing met the bar today. The agent left a note about why — tap below.";
+    p.textContent = "Nothing met the bar today.";
     wrap.appendChild(p);
   }
 
   for (const item of digest.items) {
     wrap.appendChild(renderItem(item));
-  }
-
-  if (digest.agent_notes) {
-    wrap.appendChild(renderAgentNotes(digest.agent_notes));
   }
 
   return wrap;
@@ -145,13 +141,43 @@ function renderItem(item: DigestItem, onRemoved?: () => void): HTMLElement {
   card.appendChild(meta);
 
   if (item.summary) {
-    const p = document.createElement("p");
-    p.textContent = item.summary;
-    card.appendChild(p);
+    card.appendChild(renderSummary(item.summary));
   }
 
   card.appendChild(renderThumbs(item, card, onRemoved));
   return card;
+}
+
+function renderSummary(text: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "summary is-clamped";
+
+  const p = document.createElement("p");
+  p.className = "summary-text";
+  p.textContent = text;
+  wrap.appendChild(p);
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "summary-toggle";
+  toggle.textContent = "show more";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.hidden = true;
+  toggle.onclick = () => {
+    const expanded = wrap.classList.toggle("is-expanded");
+    wrap.classList.toggle("is-clamped", !expanded);
+    toggle.textContent = expanded ? "show less" : "show more";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  };
+  wrap.appendChild(toggle);
+
+  // Reveal the toggle only when the clamped text actually overflows. We need
+  // to wait for layout, so defer until the element is in the document.
+  requestAnimationFrame(() => {
+    if (p.scrollHeight - p.clientHeight > 1) toggle.hidden = false;
+  });
+
+  return wrap;
 }
 
 function renderThumbs(item: DigestItem, card: HTMLElement, onRemoved?: () => void): HTMLElement {
@@ -252,26 +278,6 @@ function renderThumbs(item: DigestItem, card: HTMLElement, onRemoved?: () => voi
   actions.appendChild(thumbs);
   actions.appendChild(notesEl);
   return actions;
-}
-
-function renderAgentNotes(notes: string): HTMLElement {
-  const wrap = document.createElement("div");
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "notes-toggle";
-  toggle.textContent = "agent notes";
-  toggle.setAttribute("aria-expanded", "false");
-  const body = document.createElement("div");
-  body.className = "notes-body";
-  body.hidden = true;
-  body.textContent = notes;
-  toggle.onclick = () => {
-    body.hidden = !body.hidden;
-    toggle.setAttribute("aria-expanded", body.hidden ? "false" : "true");
-  };
-  wrap.appendChild(toggle);
-  wrap.appendChild(body);
-  return wrap;
 }
 
 function emptyState(text: string): HTMLElement {
