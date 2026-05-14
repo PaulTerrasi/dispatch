@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dispatch — horizon sun">
+  <!-- A: Geometric horizon sun. Half-disk + horizon line + two short rays. -->
+  <rect width="512" height="512" fill="#FBF6EE"/>
+  <!-- safe zone: keep all glyph art within 80px inset (i.e. 80..432) -->
+  <g transform="translate(256 296)">
+    <!-- horizon line, coral→gold gradient -->
+    <defs>
+      <linearGradient id="ahz" x1="-160" y1="0" x2="160" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#E8553C"/>
+        <stop offset="1" stop-color="#E5A03A"/>
+      </linearGradient>
+    </defs>
+    <!-- sun: half-disk sitting on the horizon -->
+    <path d="M -88 0 A 88 88 0 0 1 88 0 Z" fill="#E8553C"/>
+    <!-- inner highlight -->
+    <path d="M -56 0 A 56 56 0 0 1 56 0 Z" fill="#E5A03A" opacity="0.85"/>
+    <!-- horizon line -->
+    <rect x="-160" y="-3" width="320" height="6" rx="3" fill="url(#ahz)"/>
+    <!-- two faint rays above the sun -->
+    <g stroke="#E8553C" stroke-width="8" stroke-linecap="round" opacity="0.85">
+      <line x1="-110" y1="-104" x2="-92" y2="-72"/>
+      <line x1="110" y1="-104" x2="92" y2="-72"/>
+      <line x1="0" y1="-128" x2="0" y2="-96"/>
+    </g>
+  </g>
+</svg>

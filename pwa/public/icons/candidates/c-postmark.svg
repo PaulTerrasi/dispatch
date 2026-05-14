@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dispatch — postmark seal">
+  <!-- C: Circular postmark / dispatch seal. Double ring with curving lowercase
+       "dispatch" type, a small sun in the center, and tiny radial ticks. -->
+  <rect width="512" height="512" fill="#FBF6EE"/>
+  <g transform="translate(256 256)">
+    <defs>
+      <!-- Path the dispatch type follows. Anti-clockwise on the top half so
+           letters sit upright along the upper arc. -->
+      <path id="cArcTop" d="M -150 0 A 150 150 0 0 1 150 0" fill="none"/>
+      <path id="cArcBot" d="M -130 0 A 130 130 0 0 0 130 0" fill="none"/>
+    </defs>
+
+    <!-- outer ring -->
+    <circle r="170" fill="none" stroke="#1B2A4E" stroke-width="6"/>
+    <!-- inner ring -->
+    <circle r="148" fill="none" stroke="#1B2A4E" stroke-width="2"/>
+
+    <!-- radial ticks between the rings -->
+    <g stroke="#1B2A4E" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="-170" x2="0" y2="-148"/>
+      <line x1="0" y1="170" x2="0" y2="148"/>
+      <line x1="-170" y1="0" x2="-148" y2="0"/>
+      <line x1="170" y1="0" x2="148" y2="0"/>
+    </g>
+
+    <!-- curved "dispatch" wordmark, top -->
+    <text font-family="Georgia, 'Fraunces', serif" font-size="36" font-style="italic"
+          fill="#1B2A4E" letter-spacing="6">
+      <textPath href="#cArcTop" startOffset="50%" text-anchor="middle">dispatch</textPath>
+    </text>
+
+    <!-- curved date-ish flourish, bottom -->
+    <text font-family="Georgia, 'Fraunces', serif" font-size="20" fill="#7A7468" letter-spacing="8">
+      <textPath href="#cArcBot" startOffset="50%" text-anchor="middle">·  daily  ·</textPath>
+    </text>
+
+    <!-- center sunrise: horizon line + half-disk -->
+    <g transform="translate(0 24)">
+      <path d="M -56 0 A 56 56 0 0 1 56 0 Z" fill="#E8553C"/>
+      <path d="M -34 0 A 34 34 0 0 1 34 0 Z" fill="#E5A03A"/>
+      <rect x="-86" y="-2" width="172" height="4" rx="2" fill="#E8553C"/>
+    </g>
+  </g>
+</svg>

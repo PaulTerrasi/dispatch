@@ -1,0 +1,36 @@
+# Python
+.venv/
+.venv.nosync/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+.coverage[ -]*
+htmlcov/
+
+# Node / PWA
+node_modules/
+pwa/dist/
+pwa/test-results/
+pwa/playwright-report/
+server/static/
+
+# CDK
+infra/cdk.out/
+infra/cdk.context.json
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Env / secrets
+.env
+.env.local
+*.log
+
+# Local data store (separate repo)
+/data/

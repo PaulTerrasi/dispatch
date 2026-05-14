@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dispatch — serif D with rising sun">
+  <!-- B: Fraunces-style "D" monogram in deep indigo, with a coral sun rising
+       across the baseline of the bowl. -->
+  <rect width="512" height="512" fill="#FBF6EE"/>
+  <!-- Safe zone: glyph contained within 80..432. -->
+  <g transform="translate(256 256)">
+    <!-- Clip so the sun appears to rise from behind the baseline rule. -->
+    <defs>
+      <clipPath id="bClip">
+        <!-- everything above the horizon line at y=70 inside the icon area -->
+        <rect x="-180" y="-200" width="360" height="270"/>
+      </clipPath>
+      <linearGradient id="bSun" x1="0" y1="-60" x2="0" y2="60" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#E8553C"/>
+        <stop offset="1" stop-color="#E5A03A"/>
+      </linearGradient>
+    </defs>
+
+    <!-- The serif D, drawn as filled shapes (no font dependency). -->
+    <!-- outer silhouette: a high-contrast serif D with bracketed serifs -->
+    <path fill="#1B2A4E" d="
+      M -132 -150
+      L -132 -120
+      L -100 -120
+      L -100 120
+      L -132 120
+      L -132 150
+      L 24 150
+      C 100 150 152 96 152 0
+      C 152 -96 100 -150 24 -150
+      Z
+      M -52 -114
+      L 16 -114
+      C 78 -114 116 -72 116 0
+      C 116 72 78 114 16 114
+      L -52 114
+      Z
+    "/>
+
+    <!-- Sun rising through the bowl of the D, clipped to live above the horizon. -->
+    <g clip-path="url(#bClip)">
+      <circle cx="34" cy="40" r="56" fill="url(#bSun)"/>
+    </g>
+
+    <!-- Coral horizon rule across the baseline of the D, only on the right side
+         where the bowl lives — keeps the left stem clean. -->
+    <rect x="-52" y="68" width="180" height="4" rx="2" fill="#E8553C"/>
+  </g>
+</svg>

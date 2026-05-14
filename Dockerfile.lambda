@@ -1,0 +1,36 @@
+# Lambda image powered by AWS Lambda Web Adapter (LWA).
+#
+# LWA is a Lambda extension binary at /opt/extensions/lambda-adapter that
+# bridges the Lambda Runtime API to a plain HTTP server. We run uvicorn on
+# port 8080; LWA forwards each Lambda invocation to it. With the Function
+# URL configured for InvokeMode.RESPONSE_STREAM, SSE responses pass through
+# to the client without buffering — Mangum (and API Gateway HTTP API) cannot
+# stream, which is why we replaced them.
+FROM --platform=linux/amd64 public.ecr.aws/docker/library/python:3.12-slim
+
+# Lambda Web Adapter — drop the binary into /opt/extensions where Lambda
+# auto-discovers extensions at cold start.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+
+# LWA runtime knobs.
+ENV PORT=8080 \
+    AWS_LWA_INVOKE_MODE=response_stream \
+    AWS_LWA_READINESS_CHECK_PATH=/api/profile/status \
+    PYTHONUNBUFFERED=1
+
+# Install uv (matches the Fargate image and local dev).
+COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /usr/local/bin/uv
+
+WORKDIR /var/task
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o requirements.txt \
+    && pip install --no-cache-dir --target /var/task -r requirements.txt \
+    && rm requirements.txt pyproject.toml uv.lock
+
+COPY server/ /var/task/server/
+COPY digest/ /var/task/digest/
+RUN chmod -R a+r /var/task/server/ /var/task/digest/
+
+ENV PYTHONPATH=/var/task
+
+CMD ["python", "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8080"]
