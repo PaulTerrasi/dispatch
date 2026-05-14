@@ -145,13 +145,43 @@ function renderItem(item: DigestItem, onRemoved?: () => void): HTMLElement {
   card.appendChild(meta);
 
   if (item.summary) {
-    const p = document.createElement("p");
-    p.textContent = item.summary;
-    card.appendChild(p);
+    card.appendChild(renderSummary(item.summary));
   }
 
   card.appendChild(renderThumbs(item, card, onRemoved));
   return card;
+}
+
+function renderSummary(text: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "summary is-clamped";
+
+  const p = document.createElement("p");
+  p.className = "summary-text";
+  p.textContent = text;
+  wrap.appendChild(p);
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "summary-toggle";
+  toggle.textContent = "show more";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.hidden = true;
+  toggle.onclick = () => {
+    const expanded = wrap.classList.toggle("is-expanded");
+    wrap.classList.toggle("is-clamped", !expanded);
+    toggle.textContent = expanded ? "show less" : "show more";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  };
+  wrap.appendChild(toggle);
+
+  // Reveal the toggle only when the clamped text actually overflows. We need
+  // to wait for layout, so defer until the element is in the document.
+  requestAnimationFrame(() => {
+    if (p.scrollHeight - p.clientHeight > 1) toggle.hidden = false;
+  });
+
+  return wrap;
 }
 
 function renderThumbs(item: DigestItem, card: HTMLElement, onRemoved?: () => void): HTMLElement {
