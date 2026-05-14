@@ -10,13 +10,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import structlog
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     SdkMcpTool,
@@ -31,7 +31,7 @@ from digest.tools.rss import fetch_rss
 from digest.tools.web_fetch import web_fetch
 from digest.tools.youtube import fetch_youtube_channel, fetch_youtube_transcript
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -188,7 +188,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_rss", {"url": url}, f"{len(payload)} entries")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.fetch_rss_failed", extra={"url": url})
+            log.exception("tool.fetch_rss_failed", url=url)
             state.record("fetch_rss", {"url": url}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error fetching {url}: {e}"}],
@@ -209,7 +209,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_youtube_channel", {"channel_id": channel_id}, f"{len(payload)}")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.fetch_youtube_channel_failed", extra={"channel_id": channel_id})
+            log.exception("tool.fetch_youtube_channel_failed", channel_id=channel_id)
             state.record("fetch_youtube_channel", {"channel_id": channel_id}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error: {e}"}],
@@ -228,7 +228,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_youtube_transcript", {"video_id": video_id}, f"{len(t.text)} chars")
             return {"content": [{"type": "text", "text": t.text}]}
         except Exception as e:
-            log.exception("tool.fetch_youtube_transcript_failed", extra={"video_id": video_id})
+            log.exception("tool.fetch_youtube_transcript_failed", video_id=video_id)
             state.record("fetch_youtube_transcript", {"video_id": video_id}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"transcript unavailable: {e}"}],
@@ -248,7 +248,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("web_fetch", {"url": url}, f"{len(doc.text)} chars")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.web_fetch_failed", extra={"url": url})
+            log.exception("tool.web_fetch_failed", url=url)
             state.record("web_fetch", {"url": url}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error fetching {url}: {e}"}],

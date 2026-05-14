@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,6 +8,15 @@ from fastapi.testclient import TestClient
 
 from digest.store import Store
 from server.app import create_app
+
+
+def _recent_iso(minutes_ago: int = 0) -> str:
+    """ISO8601 timestamp for `minutes_ago` minutes before now (UTC).
+
+    Tests use this instead of hardcoded dates so the 14-day lookback in
+    /api/_runs/recent doesn't filter seeded runs out as time passes.
+    """
+    return (datetime.now(UTC) - timedelta(minutes=minutes_ago)).isoformat()
 
 
 @pytest.fixture
@@ -52,7 +61,7 @@ def _seed_digest(tmp_data_dir: Path) -> Store:
         {
             "run_id": "cur00001",
             "kind": "curation",
-            "started_at": "2026-04-29T05:00:00+00:00",
+            "started_at": _recent_iso(minutes_ago=120),
             "duration_seconds": 312,
             "tool_calls": 14,
             "tool_log": [],
@@ -68,7 +77,7 @@ def _seed_digest(tmp_data_dir: Path) -> Store:
         {
             "run_id": "ref00001",
             "kind": "reflection",
-            "started_at": "2026-04-29T05:08:00+00:00",
+            "started_at": _recent_iso(minutes_ago=112),
             "duration_seconds": 18,
             "tool_calls": 4,
             "tool_log": [],
@@ -322,7 +331,7 @@ def test_recent_runs(client: TestClient, tmp_data_dir: Path):
         {
             "run_id": "aaa00001",
             "kind": "curation",
-            "started_at": "2026-04-29T06:00:00+00:00",
+            "started_at": _recent_iso(minutes_ago=60),
             "duration_seconds": 300,
             "item_count": 0,
         }
@@ -331,7 +340,7 @@ def test_recent_runs(client: TestClient, tmp_data_dir: Path):
         {
             "run_id": "aaa00002",
             "kind": "reflection",
-            "started_at": "2026-04-29T07:00:00+00:00",
+            "started_at": _recent_iso(minutes_ago=30),
             "duration_seconds": 12,
             "triggering_feedback": {"kind": "thumb", "value": "up", "item_id": "x"},
         }

@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import secrets
 import shutil
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 from digest.store import Source, Store
@@ -39,7 +39,7 @@ PROFILE_MD = """# Profile
 
 ## Voice / taste notes
 - Prefer technical depth over executive summaries
-- Tolerate long-form (30–60 min reads) if the payoff is concrete
+- Tolerate long-form (30-60 min reads) if the payoff is concrete
 - Skeptical of vendor blog posts unless they include numbers
 - Engineering blogs with code > essays without
 """
@@ -380,7 +380,7 @@ def _build_curation_run(
         "system_prompt": (
             "You are the curation agent for the user's morning digest. Read "
             "profile.md and sources.yaml, fetch new items, dedup against the "
-            "last 7 days, and write 4–8 items into today's digest."
+            "last 7 days, and write 4-8 items into today's digest."
         ),
         "user_prompt": "Curate today's digest.",
         "item_count": item_count,
@@ -464,7 +464,7 @@ def seed(data_dir: Path, days: int, force: bool) -> None:
 
     for offset in range(days):
         d = today - timedelta(days=offset)
-        # 4–7 items per day, deterministic per-day but varied.
+        # 4-7 items per day, deterministic per-day but varied.
         seed_n = (offset * 7) % pool_len
         item_count = 4 + (offset % 4)
 
@@ -522,7 +522,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="./data", type=Path)
     parser.add_argument("--days", default=7, type=int)
-    parser.add_argument("--force", action="store_true", help="wipe existing digests/runs/feedback first")
+    parser.add_argument(
+        "--force", action="store_true", help="wipe existing digests/runs/feedback first"
+    )
     args = parser.parse_args()
     seed(args.data_dir, args.days, args.force)
 
