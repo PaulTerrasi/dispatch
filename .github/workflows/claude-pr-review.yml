@@ -1,0 +1,84 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Record start time
+        id: started
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Claude code review
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Read,Grep,Glob"'
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in
+            ${{ github.repository }}.
+
+            Steps:
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to read
+               the diff. Read surrounding code with `gh` or local files as
+               needed.
+            2. Evaluate the change for:
+               - Correctness, bugs, likely regressions
+               - Security (injection, auth, secrets, unsafe deserialization)
+               - Repo conventions from CLAUDE.md: AWS-only deployment (no
+                 Pi/SSH/systemd path), storage through `digest.store.Store`,
+                 Python deps via pyproject + uv.lock
+               - Test coverage for new behavior
+            3. Post the review by running:
+               `gh pr review ${{ github.event.pull_request.number }} --comment --body-file <file>`
+               where <file> contains a concise markdown summary (findings
+               grouped by severity, file:line references). If there are no
+               material issues, post a short "LGTM — no blocking issues"
+               comment so it is visible the review ran.
+
+            Be concise. Skip nits unless they materially affect readability
+            or correctness.
+
+      - name: Verify Claude posted something
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          STARTED: ${{ steps.started.outputs.ts }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Count reviews + issue comments created at/after STARTED, by anyone
+          # other than the PR author. This catches reviews Claude posted and
+          # also surface comments.
+          reviews=$(gh api "repos/$REPO/pulls/$PR/reviews" \
+            --jq "[.[] | select(.submitted_at >= \"$STARTED\")] | length")
+          comments=$(gh api "repos/$REPO/issues/$PR/comments" \
+            --jq "[.[] | select(.created_at >= \"$STARTED\") | select(.user.login != \"coderabbitai[bot]\")] | length")
+          echo "New reviews since $STARTED: $reviews"
+          echo "New comments since $STARTED: $comments"
+          if [ "$reviews" -gt 0 ] || [ "$comments" -gt 0 ]; then
+            echo "Claude posted output — verification passed."
+            exit 0
+          fi
+          echo "No output from Claude detected — posting fallback comment."
+          body="Claude PR review ran but produced no visible output (outcome: \`$CLAUDE_OUTCOME\`). See [workflow run]($RUN_URL)."
+          gh pr comment "$PR" --repo "$REPO" --body "$body"
