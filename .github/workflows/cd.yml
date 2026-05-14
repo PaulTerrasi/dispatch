@@ -123,6 +123,8 @@ jobs:
     needs: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,14 +138,19 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Computed tag: $tag"
 
-      - name: Create tag
+      - name: Create tag (idempotent)
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
+             || git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping create+push (re-run safe)."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
 
       - name: Generate release notes
         id: notes
@@ -168,7 +175,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes-file NOTES.md \
-            --target "${{ github.sha }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping create (re-run safe)."
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file NOTES.md \
+              --target "${{ github.sha }}"
+          fi
