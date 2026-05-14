@@ -188,7 +188,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_rss", {"url": url}, f"{len(payload)} entries")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.fetch_rss_failed", extra={"url": url})
+            log.exception("tool.fetch_rss_failed", url=url)
             state.record("fetch_rss", {"url": url}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error fetching {url}: {e}"}],
@@ -209,7 +209,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_youtube_channel", {"channel_id": channel_id}, f"{len(payload)}")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.fetch_youtube_channel_failed", extra={"channel_id": channel_id})
+            log.exception("tool.fetch_youtube_channel_failed", channel_id=channel_id)
             state.record("fetch_youtube_channel", {"channel_id": channel_id}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error: {e}"}],
@@ -228,7 +228,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("fetch_youtube_transcript", {"video_id": video_id}, f"{len(t.text)} chars")
             return {"content": [{"type": "text", "text": t.text}]}
         except Exception as e:
-            log.exception("tool.fetch_youtube_transcript_failed", extra={"video_id": video_id})
+            log.exception("tool.fetch_youtube_transcript_failed", video_id=video_id)
             state.record("fetch_youtube_transcript", {"video_id": video_id}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"transcript unavailable: {e}"}],
@@ -248,7 +248,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("web_fetch", {"url": url}, f"{len(doc.text)} chars")
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
-            log.exception("tool.web_fetch_failed", extra={"url": url})
+            log.exception("tool.web_fetch_failed", url=url)
             state.record("web_fetch", {"url": url}, f"error: {e}")
             return {
                 "content": [{"type": "text", "text": f"error fetching {url}: {e}"}],
