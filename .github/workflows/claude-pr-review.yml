@@ -1,0 +1,41 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. Focus on:
+            - Correctness, bugs, and likely regressions
+            - Security issues (injection, auth, secrets, unsafe deserialization)
+            - Adherence to repo conventions in CLAUDE.md (especially: AWS-only
+              deployment, no Pi/SSH/systemd path; storage goes through the
+              `digest.store.Store` interface; Python deps via pyproject + uv.lock)
+            - Tests for new behavior
+
+            Leave inline review comments on specific lines where useful, and
+            post one overall summary comment. Be concise. Skip nits unless
+            they materially affect readability or correctness.
