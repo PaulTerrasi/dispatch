@@ -17,8 +17,9 @@ export function initViewportTracker(): void {
 
   apply();
   if (vv) {
+    // `scroll` only fires on offsetTop/Left changes, which apply() ignores —
+    // resize alone covers every height change we care about.
     vv.addEventListener("resize", apply);
-    vv.addEventListener("scroll", apply);
   } else {
     window.addEventListener("resize", apply);
   }

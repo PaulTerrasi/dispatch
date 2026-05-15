@@ -13,7 +13,7 @@ describe("initViewportTracker", () => {
     document.documentElement.style.removeProperty("--viewport-h");
   });
 
-  it("mirrors visualViewport.height into --viewport-h and listens for resize/scroll", () => {
+  it("mirrors visualViewport.height into --viewport-h and listens for resize", () => {
     const listeners: Record<string, () => void> = {};
     const fakeVV = {
       height: 600,
@@ -29,7 +29,6 @@ describe("initViewportTracker", () => {
     initViewportTracker();
     expect(document.documentElement.style.getPropertyValue("--viewport-h")).toBe("600px");
     expect(fakeVV.addEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
-    expect(fakeVV.addEventListener).toHaveBeenCalledWith("scroll", expect.any(Function));
 
     fakeVV.height = 320;
     listeners.resize();
