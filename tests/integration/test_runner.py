@@ -559,53 +559,6 @@ async def test_read_triggering_curation_run_uses_top_level_snapshot(
 
 
 @pytest.mark.asyncio
-async def test_read_triggering_curation_run_legacy_details_snapshot(
-    tmp_data_dir: Path,
-) -> None:
-    """Fallback path: no top-level snapshot, but a read_profile tool_log entry
-    carries it under details (the new nested-details schema)."""
-    from digest.agent import RunState, build_reflection_tools
-
-    store = Store(tmp_data_dir)
-    store.ensure_layout()
-    store.append_run(
-        {
-            "run_id": "cur2b",
-            "kind": "curation",
-            "started_at": "2026-05-10T08:00:00+00:00",
-            "submitted_item_ids": ["xyz98765"],
-            "tool_log": [
-                {
-                    "ts": "2026-05-10T08:00:01+00:00",
-                    "tool": "list_sources",
-                    "args": {},
-                    "outcome": "5 sources",
-                },
-                {
-                    "ts": "2026-05-10T08:00:02+00:00",
-                    "tool": "read_profile",
-                    "args": {},
-                    "outcome": "20 chars",
-                    "details": {"profile_snapshot": "# Profile\n- new schema\n"},
-                },
-            ],
-        }
-    )
-    state = RunState(store=store, today=date(2026, 5, 10))
-    state.triggering_event = {
-        "ts": "2026-05-10T11:00:00+00:00",
-        "kind": "thumb",
-        "value": "up",
-        "item_id": "xyz98765",
-    }
-    build_reflection_tools(state)
-
-    result = await state.current_tools["read_triggering_curation_run"]({})
-    text = result["content"][0]["text"]
-    assert "new schema" in text
-
-
-@pytest.mark.asyncio
 async def test_read_triggering_curation_run_legacy_run_without_snapshot(
     tmp_data_dir: Path,
 ) -> None:

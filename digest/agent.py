@@ -107,6 +107,17 @@ def _stable_id(url: str, title: str) -> str:
     return h[:8]
 
 
+def _truncate_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Cap free-text fields on a fetched feed entry before stashing it in
+    `details`. Keeps run records bounded when a feed has long HTML summaries."""
+    out = dict(entry)
+    for k in ("summary", "description", "content"):
+        v = out.get(k)
+        if isinstance(v, str) and len(v) > 2000:
+            out[k] = v[:2000]
+    return out
+
+
 def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     """Returns SDK MCP tools for the curation phase.
 
@@ -160,7 +171,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "fetch_rss",
                 {"url": url},
                 f"{len(payload)} entries",
-                details={"entries": payload},
+                details={"entries": [_truncate_entry(e) for e in payload]},
             )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
@@ -186,7 +197,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "fetch_youtube_channel",
                 {"channel_id": channel_id},
                 f"{len(payload)}",
-                details={"entries": payload},
+                details={"entries": [_truncate_entry(e) for e in payload]},
             )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
@@ -583,15 +594,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         if isinstance(top_level, str) and top_level:
             snapshot = top_level
         else:
+            # Legacy runs (pre-top-level-snapshot) stored it flat on a
+            # read_profile tool_log entry.
             for entry in match.get("tool_log") or []:
-                if entry.get("tool") != "read_profile":
-                    continue
-                # New schema nests it under details; legacy runs have it flat.
-                details = entry.get("details")
-                if isinstance(details, dict) and isinstance(details.get("profile_snapshot"), str):
-                    snapshot = details["profile_snapshot"]
-                    break
-                if isinstance(entry.get("profile_snapshot"), str):
+                if entry.get("tool") == "read_profile" and isinstance(
+                    entry.get("profile_snapshot"), str
+                ):
                     snapshot = entry["profile_snapshot"]
                     break
         compact = _compact_curation_runs([match], max_bytes=40_000)

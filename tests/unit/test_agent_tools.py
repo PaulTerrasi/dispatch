@@ -95,6 +95,31 @@ async def test_curation_fetch_rss_success(store: Store, monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_curation_fetch_rss_truncates_long_summaries_in_details(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Long feed summaries get capped at 2000 chars in the stored details
+    payload so a chatty feed doesn't bloat the run record."""
+    from digest import agent as agent_mod
+    from digest.tools.rss import FeedEntry
+
+    long_summary = "x" * 5000
+
+    async def _fake_rss(url: str, *, limit: int = 25) -> list[FeedEntry]:
+        return [
+            FeedEntry(title="T", url="u", published=None, summary=long_summary, source_title="src")
+        ]
+
+    monkeypatch.setattr(agent_mod, "fetch_rss", _fake_rss)
+    state = _state(store)
+    build_curation_tools(state)
+    await state.current_tools["fetch_rss"]({"url": "https://x"})
+    entry = state.tool_log[-1]
+    stored = entry["details"]["entries"][0]["summary"]
+    assert len(stored) == 2000
+
+
+@pytest.mark.asyncio
 async def test_curation_fetch_rss_error_returns_isError(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:
