@@ -3,9 +3,7 @@ import { prettyToolName } from "../tool-names";
 
 describe("prettyToolName", () => {
   it("strips mcp__<server>__ prefix", () => {
-    expect(prettyToolName("mcp__github__list_pull_requests")).toBe(
-      "list pull requests",
-    );
+    expect(prettyToolName("mcp__github__list_pull_requests")).toBe("list pull requests");
   });
 
   it("converts snake_case to spaces", () => {
