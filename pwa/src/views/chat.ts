@@ -72,7 +72,8 @@ export async function renderChat(): Promise<HTMLElement> {
 
   const root = document.createElement("div");
   root.className = "chat-root";
-  root.appendChild(renderChatHeader());
+  const { bar: headerBar, profileToggleBtn } = renderChatHeader();
+  root.appendChild(headerBar);
 
   const layout = document.createElement("div");
   layout.className = "chat-layout";
@@ -93,17 +94,19 @@ export async function renderChat(): Promise<HTMLElement> {
   // ── Profile panel (live read of profile.md) ──────────────────────────────
   const profilePanel = document.createElement("aside");
   profilePanel.className = "chat-profile";
-  const profileHeader = document.createElement("button");
-  profileHeader.type = "button";
+  const profileHeader = document.createElement("div");
   profileHeader.className = "chat-profile-header";
   const profileLabel = document.createElement("span");
   profileLabel.className = "chat-profile-label";
   profileLabel.textContent = "profile.md";
-  const profileToggle = document.createElement("span");
-  profileToggle.className = "chat-profile-toggle";
-  profileToggle.setAttribute("aria-hidden", "true");
+  const profileClose = document.createElement("button");
+  profileClose.type = "button";
+  profileClose.className = "chat-profile-close";
+  profileClose.setAttribute("aria-label", "Close profile");
+  profileClose.title = "Close";
+  profileClose.textContent = "×";
   profileHeader.appendChild(profileLabel);
-  profileHeader.appendChild(profileToggle);
+  profileHeader.appendChild(profileClose);
   const profileBody = document.createElement("div");
   profileBody.className = "chat-profile-body";
   profilePanel.appendChild(profileHeader);
@@ -113,9 +116,9 @@ export async function renderChat(): Promise<HTMLElement> {
   // ── Collapse / expand profile panel ─────────────────────────────────────
   const setCollapsed = (collapsed: boolean): void => {
     layout.classList.toggle("profile-collapsed", collapsed);
-    profileHeader.setAttribute("aria-expanded", String(!collapsed));
-    profileHeader.title = collapsed ? "Show profile.md" : "Hide profile.md";
-    profileToggle.textContent = collapsed ? "›" : "‹";
+    profileToggleBtn.setAttribute("aria-expanded", String(!collapsed));
+    profileToggleBtn.title = collapsed ? "Show profile.md" : "Hide profile.md";
+    profileToggleBtn.classList.toggle("is-active", !collapsed);
     try {
       localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
     } catch {
@@ -126,9 +129,10 @@ export async function renderChat(): Promise<HTMLElement> {
   };
   // Default: collapsed. Only treat an explicit "0" as expanded.
   setCollapsed(localStorage.getItem(COLLAPSED_KEY) !== "0");
-  profileHeader.addEventListener("click", () => {
+  profileToggleBtn.addEventListener("click", () => {
     setCollapsed(!layout.classList.contains("profile-collapsed"));
   });
+  profileClose.addEventListener("click", () => setCollapsed(true));
   backdrop.addEventListener("click", () => setCollapsed(true));
 
   const refreshProfile = async (): Promise<void> => {
@@ -312,19 +316,31 @@ export async function renderChat(): Promise<HTMLElement> {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function renderChatHeader(): HTMLElement {
+function renderChatHeader(): { bar: HTMLElement; profileToggleBtn: HTMLButtonElement } {
   const bar = document.createElement("header");
   bar.className = "toolbar chat-toolbar";
   const title = document.createElement("strong");
   title.textContent = "dispatch chat";
   bar.appendChild(title);
+
+  const right = document.createElement("div");
+  right.className = "chat-toolbar-actions";
+
+  const profileToggleBtn = document.createElement("button");
+  profileToggleBtn.type = "button";
+  profileToggleBtn.className = "chat-profile-btn";
+  profileToggleBtn.textContent = "profile.md";
+  right.appendChild(profileToggleBtn);
+
   const back = document.createElement("a");
   back.href = "#/today";
   back.className = "chat-back";
   back.textContent = "today ›";
   back.setAttribute("aria-label", "Back to today");
-  bar.appendChild(back);
-  return bar;
+  right.appendChild(back);
+
+  bar.appendChild(right);
+  return { bar, profileToggleBtn };
 }
 
 function prettyToolStart(name: string, _input: unknown): string {
