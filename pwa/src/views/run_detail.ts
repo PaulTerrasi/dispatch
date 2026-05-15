@@ -434,32 +434,26 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
       pickString(row, "published_at") ??
       pickString(row, "ts");
 
-    if (title) {
-      const t = document.createElement("div");
-      t.className = "run-event-detail-row-title";
-      if (url) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = title;
-        t.appendChild(a);
-      } else {
-        t.textContent = title;
-      }
-      li.appendChild(t);
+    const safeUrl = url && /^https?:/i.test(url) ? url : undefined;
+    const label = title ?? sub ?? JSON.stringify(row);
+    const row_title = document.createElement("div");
+    row_title.className = "run-event-detail-row-title";
+    if (safeUrl) {
+      const a = document.createElement("a");
+      a.href = safeUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = label;
+      row_title.appendChild(a);
+    } else {
+      row_title.textContent = label;
     }
-    if (sub) {
+    li.appendChild(row_title);
+    if (title && sub) {
       const s = document.createElement("div");
       s.className = "run-event-detail-row-sub";
       s.textContent = sub;
       li.appendChild(s);
-    }
-    if (!title && !sub) {
-      const pre = document.createElement("pre");
-      pre.className = "run-event-detail-pre";
-      pre.textContent = JSON.stringify(row, null, 2);
-      li.appendChild(pre);
     }
     list.appendChild(li);
   }

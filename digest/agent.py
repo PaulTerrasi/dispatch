@@ -126,7 +126,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_profile",
             {},
             f"{len(text)} chars",
-            details={"profile_snapshot": text, "profile": text},
+            details={"profile_snapshot": text},
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -259,7 +259,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "fetch_youtube_transcript",
                 {"video_id": video_id},
                 f"{len(t.text)} chars",
-                details={"text": t.text},
+                details={"text": t.text[:20_000]},
             )
             return {"content": [{"type": "text", "text": t.text}]}
         except Exception as e:
