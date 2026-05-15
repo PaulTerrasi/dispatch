@@ -399,7 +399,10 @@ export async function renderChat(): Promise<HTMLElement> {
         const body = currentReasoningEl!.querySelector(
           ".chat-reasoning-body",
         ) as HTMLElement | null;
-        if (body) body.textContent = currentReasoningItem.text;
+        // Append a new text node rather than re-setting `body.textContent` to
+        // the full accumulated string — extended thinking can emit tens of KB
+        // of deltas and rewriting the full text on each one is O(N²).
+        if (body) body.appendChild(document.createTextNode(delta));
         currentReasoningEl!.scrollIntoView({ block: "end" });
         // No persist: reasoning is filtered out of localStorage anyway, and
         // the next text/tool event (or onDone) will flush the real state.
