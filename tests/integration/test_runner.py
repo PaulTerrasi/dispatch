@@ -525,6 +525,40 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_read_triggering_curation_run_uses_top_level_snapshot(
+    tmp_data_dir: Path,
+) -> None:
+    """New curation runs store profile_snapshot at the top level of the run
+    record (since the read_profile tool was removed from curation). The
+    reflection lookup should prefer that over scanning tool_log."""
+    from digest.agent import RunState, build_reflection_tools
+
+    store = Store(tmp_data_dir)
+    store.ensure_layout()
+    store.append_run(
+        {
+            "run_id": "cur2",
+            "kind": "curation",
+            "started_at": "2026-05-10T08:00:00+00:00",
+            "submitted_item_ids": ["xyz98765"],
+            "profile_snapshot": "# Profile\n- top-level snapshot path\n",
+            "tool_log": [],
+        }
+    )
+    state = RunState(store=store, today=date(2026, 5, 10))
+    state.triggering_event = {
+        "ts": "2026-05-10T11:00:00+00:00",
+        "kind": "thumb",
+        "value": "down",
+        "item_id": "xyz98765",
+    }
+    build_reflection_tools(state)
+    result = await state.current_tools["read_triggering_curation_run"]({})
+    text = result["content"][0]["text"]
+    assert "top-level snapshot path" in text
+
+
+@pytest.mark.asyncio
 async def test_read_triggering_curation_run_legacy_run_without_snapshot(
     tmp_data_dir: Path,
 ) -> None:

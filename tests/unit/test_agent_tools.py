@@ -448,6 +448,59 @@ def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
     assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
 
 
+def test_fill_template_does_not_bleed_values_into_each_other(store: Store) -> None:
+    """If a value contains another placeholder, it must NOT get expanded —
+    single-pass substitution prevents user-controlled profile text from
+    injecting digest rows into itself."""
+    from digest.agent import _fill_template
+
+    out = _fill_template(
+        "P={{PROFILE}} D={{RECENT_DIGESTS}}",
+        {"PROFILE": "hostile {{RECENT_DIGESTS}}", "RECENT_DIGESTS": "real-digest"},
+    )
+    assert out == "P=hostile {{RECENT_DIGESTS}} D=real-digest"
+
+
+def test_render_recent_digests_handles_missing_digest_data(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If list_digests returns a date but read_digest comes back None for it
+    (e.g. a corrupt file mid-pipeline), the row is skipped rather than crashing."""
+    from digest.agent import _render_recent_digests_with_feedback
+
+    today = datetime.now(UTC).date()
+    monkeypatch.setattr(store, "list_digests", lambda: [today])
+    monkeypatch.setattr(store, "read_digest", lambda _d: None)
+    state = RunState(store=store, today=today)
+    out = _render_recent_digests_with_feedback(state, days=21)
+    assert "no items surfaced in the last 21 days" in out
+
+
+def test_render_recent_digests_includes_only_within_window(store: Store) -> None:
+    """Old digests outside the window are skipped (and the loop breaks early
+    because list_digests is sorted newest-first)."""
+    from datetime import timedelta as _td
+
+    from digest.agent import _render_recent_digests_with_feedback
+
+    today = date(2026, 5, 14)
+    old = today - _td(days=30)
+    store.write_digest(
+        today,
+        [{"id": "n", "title": "new", "source": "x.com", "url": "https://x.com/n"}],
+        "",
+    )
+    store.write_digest(
+        old,
+        [{"id": "o", "title": "old", "source": "x.com", "url": "https://x.com/o"}],
+        "",
+    )
+    state = RunState(store=store, today=today)
+    out = _render_recent_digests_with_feedback(state, days=21)
+    assert "new" in out
+    assert "old" not in out
+
+
 def test_curation_options_injects_profile_and_recent_digests(store: Store) -> None:
     """Profile text and recent digest items (with feedback) must be substituted
     into the system prompt so the agent has them up front."""

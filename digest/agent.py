@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -75,14 +76,7 @@ class RunState:
     # Reflection-only: the feedback event that triggered this run, if any.
     triggering_event: dict[str, Any] | None = None
 
-    def record(
-        self,
-        name: str,
-        args: dict[str, Any],
-        outcome: str,
-        *,
-        extra: dict[str, Any] | None = None,
-    ) -> None:
+    def record(self, name: str, args: dict[str, Any], outcome: str) -> None:
         thinking = self.pending_thinking
         self.pending_thinking = None
         entry: dict[str, Any] = {
@@ -93,8 +87,6 @@ class RunState:
         }
         if thinking:
             entry["thinking"] = thinking
-        if extra:
-            entry.update(extra)
         self.tool_log.append(entry)
 
 
@@ -704,9 +696,10 @@ def _render_recent_digests_with_feedback(state: RunState, *, days: int = 21) -> 
     today = state.today or datetime.now(UTC).date()
     cutoff = today - timedelta(days=days)
     lines: list[str] = []
+    # list_digests() returns dates newest-first, so we can stop at the cutoff.
     for d in state.store.list_digests():
         if d < cutoff:
-            continue
+            break
         data = state.store.read_digest(d)
         if not data:
             continue
@@ -716,7 +709,18 @@ def _render_recent_digests_with_feedback(state: RunState, *, days: int = 21) -> 
                 f"{d.isoformat()}\t{item.get('source', '')}\t"
                 f"{item.get('title', '')}\t{item.get('url', '')}\t{fb}"
             )
-    return "\n".join(lines) or "(no items surfaced in the last 21 days)"
+    return "\n".join(lines) or f"(no items surfaced in the last {days} days)"
+
+
+def _fill_template(template: str, values: dict[str, str]) -> str:
+    """Single-pass `{{KEY}}` substitution so values can't bleed into each other.
+
+    Chained `str.replace` would expand a `{{B}}` placeholder embedded in the
+    text inserted for `{{A}}`, which is a real risk when one of the values is
+    user-controlled (profile.md).
+    """
+    pattern = re.compile(r"\{\{(" + "|".join(re.escape(k) for k in values) + r")\}\}")
+    return pattern.sub(lambda m: values[m.group(1)], template)
 
 
 def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOptions:
@@ -724,7 +728,7 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
     profile = state.store.read_profile()
     state.profile_snapshot = profile
     recent = _render_recent_digests_with_feedback(state, days=21)
-    system = template.replace("{{PROFILE}}", profile).replace("{{RECENT_DIGESTS}}", recent)
+    system = _fill_template(template, {"PROFILE": profile, "RECENT_DIGESTS": recent})
     state.curation_system_prompt = system
     server = create_sdk_mcp_server(
         name="digest",
