@@ -501,4 +501,26 @@ describe("renderChat — markdown rendering", () => {
       Storage.prototype.setItem = origSetItem;
     }
   });
+
+  it("renderChat mounts even when localStorage.setItem throws", async () => {
+    // Regression: Safari private mode (and quota-exceeded states) make
+    // setItem throw. The chat view's setCollapsed write must not bubble
+    // that out of the initial mount path.
+    stubProfileFetch();
+    const origSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      const el = await renderChat();
+      document.body.appendChild(el);
+      // Layout still rendered; the collapsed default stuck via the
+      // in-memory class toggle even though the persisted preference
+      // couldn't be written.
+      const layout = document.querySelector(".chat-layout") as HTMLElement;
+      expect(layout.classList.contains("profile-collapsed")).toBe(true);
+    } finally {
+      Storage.prototype.setItem = origSetItem;
+    }
+  });
 });

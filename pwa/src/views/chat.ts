@@ -116,7 +116,13 @@ export async function renderChat(): Promise<HTMLElement> {
     profileHeader.setAttribute("aria-expanded", String(!collapsed));
     profileHeader.title = collapsed ? "Show profile.md" : "Hide profile.md";
     profileToggle.textContent = collapsed ? "›" : "‹";
-    localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    try {
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      // Safari private mode (and quota-exceeded states) throw on setItem.
+      // The collapsed preference is a nice-to-have; losing it shouldn't
+      // crash chat-view mount.
+    }
   };
   // Default: collapsed. Only treat an explicit "0" as expanded.
   setCollapsed(localStorage.getItem(COLLAPSED_KEY) !== "0");

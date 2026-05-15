@@ -155,7 +155,6 @@ def test_chat_requires_user_last(client: TestClient) -> None:
         json={"history": [{"role": "assistant", "text": "hi"}]},
     )
     assert r.status_code == 400
-    assert r.status_code == 400
 
 
 # ── _format_history ────────────────────────────────────────────────────────
