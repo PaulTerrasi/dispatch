@@ -326,10 +326,11 @@ export async function renderChat(): Promise<HTMLElement> {
   for (const it of items) {
     if (it.kind === "msg") {
       appendMessage(it);
-    } else {
-      // The other persistable kind is "tool" (reasoning is never persisted).
+    } else if (it.kind === "tool") {
       appendTool(it);
     }
+    // Reasoning items are never persisted (see `persistItems`); they can
+    // only enter `items` during the live stream, never via replay.
   }
 
   const onSend = (): void => {
