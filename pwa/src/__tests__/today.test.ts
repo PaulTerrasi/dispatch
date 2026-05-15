@@ -282,17 +282,15 @@ describe("renderToday (feed)", () => {
     const toggle = wrap.querySelector(".summary-toggle") as HTMLButtonElement;
     expect(cont.hidden).toBe(true);
     toggle.click();
-    expect(wrap.classList.contains("is-expanded")).toBe(true);
     expect(cont.hidden).toBe(false);
     expect(toggle.textContent).toBe("show less");
     toggle.click();
-    expect(wrap.classList.contains("is-expanded")).toBe(false);
     expect(cont.hidden).toBe(true);
     expect(toggle.textContent).toBe("show more");
   });
 
   it("omits the show-more toggle when the agent did not provide a continuation", async () => {
-    const seed = structuredClone(FEED_SEED);
+    const seed = structuredClone(FEED_SEED).slice(0, 1);
     seed[0].summary_more = null;
     vi.stubGlobal(
       "fetch",
