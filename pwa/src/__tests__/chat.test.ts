@@ -167,8 +167,20 @@ describe("renderChat — loadItems / persistItems", () => {
     );
     const el = await renderChat();
     document.body.appendChild(el);
-    expect(document.querySelectorAll(".chat-tool-pill.ok").length).toBe(1);
-    expect(document.querySelectorAll(".chat-tool-pill.err").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card.ok").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card.err").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card.pending").length).toBe(1);
+  });
+
+  it("replays reasoning items as collapsible cards", async () => {
+    stubProfileFetch();
+    localStorage.setItem(TURNS_KEY, JSON.stringify([{ kind: "reasoning", text: "deep thoughts" }]));
+    const el = await renderChat();
+    document.body.appendChild(el);
+    expect(document.querySelectorAll(".chat-reasoning").length).toBe(1);
+    expect((document.querySelector(".chat-reasoning-body") as HTMLElement).textContent).toBe(
+      "deep thoughts",
+    );
   });
 
   it("ignores malformed entries (non-objects, bad kinds, wrong types)", async () => {
@@ -181,13 +193,15 @@ describe("renderChat — loadItems / persistItems", () => {
         { kind: "msg", role: "bogus", text: "x" },
         { kind: "tool", id: 1, label: "x", status: "ok" }, // id not a string
         { kind: "tool", id: "y", label: "x", status: "unknown" },
+        { kind: "reasoning", text: 5 }, // text not a string
         { kind: "msg", role: "user", text: "kept" },
       ]),
     );
     const el = await renderChat();
     document.body.appendChild(el);
     expect(document.querySelectorAll(".chat-msg").length).toBe(1);
-    expect(document.querySelectorAll(".chat-tool-pill").length).toBe(0);
+    expect(document.querySelectorAll(".chat-tool-card").length).toBe(0);
+    expect(document.querySelectorAll(".chat-reasoning").length).toBe(0);
   });
 
   it("handles non-array JSON in localStorage by starting empty", async () => {
@@ -259,25 +273,52 @@ describe("renderChat — send / reset / streaming", () => {
     };
   }
 
-  it("Send appends user + empty assistant placeholder, then streams text", async () => {
+  it("Send appends only the user message until text actually streams", async () => {
     const { capturedHandlers } = await mountWithFakeStream();
     const ta = document.querySelector("textarea") as HTMLTextAreaElement;
     const send = document.querySelector(".chat-input .primary") as HTMLButtonElement;
     ta.value = "Hi!";
     send.click();
 
-    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
+    // No empty assistant placeholder — just the user message + a loading indicator.
+    expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(1);
     expect(send.disabled).toBe(true);
+
     const handlers = capturedHandlers.at(-1)!;
     handlers.onText?.("Hello ");
+    // First delta creates the assistant bubble and hides the loader.
+    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(0);
+    expect(document.querySelectorAll(".chat-msg.streaming").length).toBe(1);
     handlers.onText?.("there.");
     const assistant = document.querySelectorAll(".chat-msg")[1];
     expect(assistant.textContent).toBe("Hello there.");
     handlers.onDone?.();
+    // Streaming cursor cleared after done.
+    expect(document.querySelectorAll(".chat-msg.streaming").length).toBe(0);
     expect(send.disabled).toBe(false);
     // Persisted to localStorage.
     const persisted = JSON.parse(localStorage.getItem(TURNS_KEY)!);
     expect(persisted.some((it: { text?: string }) => it.text === "Hello there.")).toBe(true);
+  });
+
+  it("Tool calls before any text do not leave an empty assistant bubble", async () => {
+    const { capturedHandlers } = await mountWithFakeStream();
+    const ta = document.querySelector("textarea") as HTMLTextAreaElement;
+    ta.value = "edit profile";
+    (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
+    const handlers = capturedHandlers.at(-1)!;
+    handlers.onToolStart?.({ id: "t1", name: "patch_profile", input: { diff: "..." } });
+    handlers.onToolEnd?.({ tool_use_id: "t1", ok: true, output: "applied" });
+    // Only the user message — no orphaned assistant bubble above the tool card.
+    expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card").length).toBe(1);
+    // Loader still visible between tool end and the next event.
+    expect(document.querySelectorAll(".chat-loading").length).toBe(1);
+    handlers.onText?.("All done.");
+    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(0);
   });
 
   it("Empty input does not send", async () => {
@@ -299,23 +340,60 @@ describe("renderChat — send / reset / streaming", () => {
     expect(capturedHandlers.length).toBe(1);
   });
 
-  it("Tool start renders a pill; tool_end flips its status class", async () => {
+  it("Tool start renders a collapsible card; tool_end flips its status class and exposes output", async () => {
     const { capturedHandlers } = await mountWithFakeStream();
     const ta = document.querySelector("textarea") as HTMLTextAreaElement;
     ta.value = "edit profile";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
     const handlers = capturedHandlers.at(-1)!;
 
-    handlers.onToolStart?.({ id: "t1", name: "patch_profile", input: {} });
+    handlers.onToolStart?.({ id: "t1", name: "patch_profile", input: { diff: "abc" } });
     handlers.onToolStart?.({ id: "t2", name: "unknown_tool", input: {} });
-    expect(document.querySelectorAll(".chat-tool-pill").length).toBe(2);
+    expect(document.querySelectorAll(".chat-tool-card").length).toBe(2);
+    // Pending state shows the "running…" status label.
+    expect(document.querySelectorAll(".chat-tool-card.pending").length).toBe(2);
 
-    handlers.onToolEnd?.({ tool_use_id: "t1", ok: true });
+    handlers.onToolEnd?.({ tool_use_id: "t1", ok: true, output: "applied diff" });
     handlers.onToolEnd?.({ tool_use_id: "t2", ok: false });
     // Unknown tool_use_id gracefully ignored.
     handlers.onToolEnd?.({ tool_use_id: "missing", ok: true });
-    expect(document.querySelectorAll(".chat-tool-pill.ok").length).toBe(1);
-    expect(document.querySelectorAll(".chat-tool-pill.err").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card.ok").length).toBe(1);
+    expect(document.querySelectorAll(".chat-tool-card.err").length).toBe(1);
+
+    // Header click toggles the .expanded class so the body shows.
+    const okCard = document.querySelector(".chat-tool-card.ok") as HTMLElement;
+    const okHeader = okCard.querySelector(".chat-tool-card-header") as HTMLButtonElement;
+    expect(okCard.classList.contains("expanded")).toBe(false);
+    okHeader.click();
+    expect(okCard.classList.contains("expanded")).toBe(true);
+    // Expanded body shows both Input and Output sections.
+    const sections = okCard.querySelectorAll(".chat-tool-card-section-label");
+    const labels = Array.from(sections).map((s) => s.textContent);
+    expect(labels).toContain("Input");
+    expect(labels).toContain("Output");
+    expect(okCard.textContent).toContain("applied diff");
+  });
+
+  it("Reasoning deltas render a streaming reasoning card and finalize on next event", async () => {
+    const { capturedHandlers } = await mountWithFakeStream();
+    const ta = document.querySelector("textarea") as HTMLTextAreaElement;
+    ta.value = "go";
+    (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
+    const handlers = capturedHandlers.at(-1)!;
+    handlers.onReasoning?.("Pondering ");
+    handlers.onReasoning?.("the question.");
+    expect(document.querySelectorAll(".chat-reasoning").length).toBe(1);
+    const card = document.querySelector(".chat-reasoning") as HTMLElement;
+    expect(card.classList.contains("streaming")).toBe(true);
+    const body = card.querySelector(".chat-reasoning-body") as HTMLElement;
+    expect(body.textContent).toBe("Pondering the question.");
+    // Header click toggles the persistent expansion.
+    (card.querySelector(".chat-reasoning-header") as HTMLButtonElement).click();
+    expect(card.classList.contains("expanded")).toBe(true);
+    // A text delta finalizes the reasoning card and starts an assistant bubble.
+    handlers.onText?.("Answer.");
+    expect(card.classList.contains("streaming")).toBe(false);
+    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
   });
 
   it("ProfileChanged triggers a profile refetch", async () => {
@@ -352,38 +430,45 @@ describe("renderChat — send / reset / streaming", () => {
     expect(fetchedAfterStart.length).toBeGreaterThanOrEqual(2); // initial + after stream
   });
 
-  it("Stream error shows an error pill and re-enables Send", async () => {
+  it("Stream error shows an error banner, clears the loader, and re-enables Send", async () => {
     const { capturedHandlers } = await mountWithFakeStream();
     const ta = document.querySelector("textarea") as HTMLTextAreaElement;
     ta.value = "x";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
     capturedHandlers.at(-1)!.onError?.("boom");
-    expect(document.querySelectorAll(".chat-tool-pill.err").length).toBeGreaterThan(0);
+    const err = document.querySelector(".chat-error") as HTMLElement;
+    expect(err).not.toBeNull();
+    expect(err.textContent).toContain("boom");
+    expect(document.querySelectorAll(".chat-loading").length).toBe(0);
     expect((document.querySelector(".chat-input .primary") as HTMLButtonElement).disabled).toBe(
       false,
     );
   });
 
-  it("Empty-assistant placeholder is dropped on done if no text streamed", async () => {
+  it("Done with no text leaves only the user message (no empty placeholder ever created)", async () => {
     const { capturedHandlers } = await mountWithFakeStream();
     const ta = document.querySelector("textarea") as HTMLTextAreaElement;
     ta.value = "ping";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
-    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
-    capturedHandlers.at(-1)!.onDone?.();
-    // Empty assistant was removed; only the user message remains.
+    // Only the user message exists pre-stream — no empty assistant placeholder.
     expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    capturedHandlers.at(-1)!.onDone?.();
+    expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(0);
   });
 
-  it("Reset aborts an in-flight stream and clears the transcript", async () => {
+  it("Reset aborts an in-flight stream, clears the transcript and removes the loader", async () => {
     const r = await mountWithFakeStream();
     const ta = document.querySelector("textarea") as HTMLTextAreaElement;
     ta.value = "thinking";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
-    expect(document.querySelectorAll(".chat-msg").length).toBe(2);
+    // User message + loading dots.
+    expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(1);
     (document.querySelector(".chat-input .secondary") as HTMLButtonElement).click();
     expect(r.abortCalls).toBe(1);
     expect(document.querySelectorAll(".chat-msg").length).toBe(0);
+    expect(document.querySelectorAll(".chat-loading").length).toBe(0);
     expect(localStorage.getItem(TURNS_KEY)).toBeNull();
   });
 });
@@ -432,19 +517,19 @@ describe("renderChat — tool-start labels", () => {
     ].entries()) {
       handlers.onToolStart?.({ id: `t${i}`, name, input: {} });
     }
-    const pills = Array.from(document.querySelectorAll(".chat-tool-pill")).map(
+    const labels = Array.from(document.querySelectorAll(".chat-tool-card-label")).map(
       (p) => p.textContent ?? "",
     );
-    expect(pills).toContain("✏️ editing profile.md…");
-    expect(pills).toContain("➕ adding source…");
-    expect(pills).toContain("➖ removing source…");
-    expect(pills).toContain("👀 reading profile…");
-    expect(pills).toContain("👀 reading recent feedback…");
-    expect(pills).toContain("👀 reading recent digests…");
-    expect(pills).toContain("👀 reading curation runs…");
-    expect(pills).toContain("👀 listing sources…");
-    expect(pills).toContain("✓ wrapping up");
-    expect(pills).toContain("· some_other_tool");
+    expect(labels).toContain("editing profile.md");
+    expect(labels).toContain("adding source");
+    expect(labels).toContain("removing source");
+    expect(labels).toContain("reading profile");
+    expect(labels).toContain("reading recent feedback");
+    expect(labels).toContain("reading recent digests");
+    expect(labels).toContain("reading curation runs");
+    expect(labels).toContain("listing sources");
+    expect(labels).toContain("wrapping up");
+    expect(labels).toContain("some_other_tool");
   });
 });
 

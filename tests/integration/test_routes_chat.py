@@ -58,11 +58,31 @@ def test_translate_text_delta() -> None:
     assert b'"delta":"tok"' in frames[0]
 
 
-def test_translate_skips_thinking_delta() -> None:
+def test_translate_thinking_delta_emits_reasoning() -> None:
+    """thinking_delta events are forwarded as `reasoning` SSE frames so the
+    chat UI can render the agent's reasoning alongside tool calls."""
     msg = StreamEvent(
         uuid="u1",
         session_id="s1",
-        event={"type": "content_block_delta", "delta": {"type": "thinking_delta", "text": "..."}},
+        event={
+            "type": "content_block_delta",
+            "delta": {"type": "thinking_delta", "thinking": "Let me think…"},
+        },
+    )
+    frames = _translate(msg)
+    assert len(frames) == 1
+    assert b"event: reasoning" in frames[0]
+    assert b'"delta":"Let me think\\u2026"' in frames[0]
+
+
+def test_translate_thinking_delta_skipped_when_empty() -> None:
+    msg = StreamEvent(
+        uuid="u1",
+        session_id="s1",
+        event={
+            "type": "content_block_delta",
+            "delta": {"type": "thinking_delta", "thinking": ""},
+        },
     )
     assert _translate(msg) == []
 
@@ -87,7 +107,91 @@ def test_translate_tool_result_block() -> None:
     frames = _translate(msg)
     assert len(frames) == 1
     payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
-    assert payload == {"tool_use_id": "t1", "ok": True}
+    assert payload == {"tool_use_id": "t1", "ok": True, "output": "ok"}
+
+
+def test_translate_tool_result_block_with_list_content() -> None:
+    """ToolResultBlock content can also be a list of dict blocks (the SDK's
+    structured form). Joined text is surfaced as `output`."""
+    msg = UserMessage(
+        content=[
+            ToolResultBlock(
+                tool_use_id="t2",
+                content=[
+                    {"type": "text", "text": "line one"},
+                    {"type": "text", "text": "line two"},
+                ],
+                is_error=False,
+            )
+        ]
+    )
+    frames = _translate(msg)
+    payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
+    assert payload == {"tool_use_id": "t2", "ok": True, "output": "line one\nline two"}
+
+
+def test_translate_tool_result_block_truncates_long_output() -> None:
+    long = "x" * 5000
+    msg = UserMessage(content=[ToolResultBlock(tool_use_id="t3", content=long, is_error=False)])
+    frames = _translate(msg)
+    payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
+    assert payload["ok"] is True
+    assert payload["output"].endswith("…(truncated)")
+    # Truncation cap is 4000 chars + suffix.
+    assert len(payload["output"]) < len(long)
+
+
+def test_translate_tool_result_block_no_content_omits_output() -> None:
+    msg = UserMessage(content=[ToolResultBlock(tool_use_id="t4", content=None, is_error=False)])
+    frames = _translate(msg)
+    payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
+    assert payload == {"tool_use_id": "t4", "ok": True}
+
+
+def test_translate_tool_result_block_list_with_non_text_entries() -> None:
+    """List-content blocks may include non-dict items or dicts without text;
+    those are silently skipped in the extracted output."""
+    msg = UserMessage(
+        content=[
+            ToolResultBlock(
+                tool_use_id="t5",
+                content=[
+                    "raw string",  # not a dict — skipped
+                    {"type": "text", "text": 42},  # non-string text — skipped
+                    {"type": "text", "text": "kept"},
+                ],
+                is_error=False,
+            )
+        ]
+    )
+    frames = _translate(msg)
+    payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
+    assert payload == {"tool_use_id": "t5", "ok": True, "output": "kept"}
+
+
+def test_translate_tool_result_block_non_str_non_list_content() -> None:
+    """Defensive: if content is some other type (e.g. an int), no output is emitted."""
+    # Pydantic dataclasses are permissive in this codebase; cast via Any to test
+    # the defensive fallback in `_tool_result_text`.
+    block = ToolResultBlock(tool_use_id="t6", content=None, is_error=False)
+    object.__setattr__(block, "content", 123)  # bypass type checking
+    frames = _translate(UserMessage(content=[block]))
+    payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
+    assert payload == {"tool_use_id": "t6", "ok": True}
+
+
+def test_translate_ignores_unknown_content_block_delta_type() -> None:
+    """A content_block_delta whose inner type is neither text_delta nor
+    thinking_delta (e.g. signature_delta) produces no frames."""
+    msg = StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={
+            "type": "content_block_delta",
+            "delta": {"type": "signature_delta", "signature": "abc"},
+        },
+    )
+    assert _translate(msg) == []
 
 
 # ── build_chat_tools: lock + profile_changed plumbing ──────────────────────
