@@ -172,6 +172,47 @@ describe("renderChat — loadItems / persistItems", () => {
     expect(document.querySelectorAll(".chat-tool-card.pending").length).toBe(1);
   });
 
+  it("replays full-shape tool items (with name/input/output) and shows both sections on expand", async () => {
+    stubProfileFetch();
+    localStorage.setItem(
+      TURNS_KEY,
+      JSON.stringify([
+        {
+          kind: "tool",
+          id: "t9",
+          name: "patch_profile",
+          label: "editing profile.md",
+          input: { diff: "abc" },
+          output: "applied",
+          status: "ok",
+        },
+        // String input exercises the typeof-string fast path in formatToolInput.
+        {
+          kind: "tool",
+          id: "t10",
+          name: "add_source",
+          label: "adding source",
+          input: "raw string input",
+          status: "ok",
+        },
+      ]),
+    );
+    document.body.appendChild(await renderChat());
+    const cards = document.querySelectorAll(".chat-tool-card");
+    expect(cards.length).toBe(2);
+    // Expand first card and verify both sections are present.
+    (cards[0].querySelector(".chat-tool-card-header") as HTMLButtonElement).click();
+    const labels = Array.from(cards[0].querySelectorAll(".chat-tool-card-section-label")).map(
+      (l) => l.textContent,
+    );
+    expect(labels).toEqual(["Input", "Output"]);
+    expect(cards[0].textContent).toContain("applied");
+    // Expand second card — string input is shown verbatim.
+    (cards[1].querySelector(".chat-tool-card-header") as HTMLButtonElement).click();
+    const pre = cards[1].querySelector(".chat-tool-card-section-content") as HTMLElement;
+    expect(pre.textContent).toBe("raw string input");
+  });
+
   it("replays reasoning items as collapsible cards", async () => {
     stubProfileFetch();
     localStorage.setItem(TURNS_KEY, JSON.stringify([{ kind: "reasoning", text: "deep thoughts" }]));
@@ -514,6 +555,7 @@ describe("renderChat — tool-start labels", () => {
       "list_sources",
       "end_reflection",
       "some_other_tool",
+      "", // empty name — exercises the `name || "tool call"` fallback
     ].entries()) {
       handlers.onToolStart?.({ id: `t${i}`, name, input: {} });
     }
@@ -530,6 +572,7 @@ describe("renderChat — tool-start labels", () => {
     expect(labels).toContain("listing sources");
     expect(labels).toContain("wrapping up");
     expect(labels).toContain("some_other_tool");
+    expect(labels).toContain("tool call");
   });
 });
 

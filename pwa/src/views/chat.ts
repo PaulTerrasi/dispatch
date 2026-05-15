@@ -582,14 +582,11 @@ function renderToolSection(label: string, content: string): HTMLElement {
 function formatToolInput(input: unknown): string {
   if (input === undefined || input === null) return "";
   if (typeof input === "string") return input;
-  try {
-    const s = JSON.stringify(input, null, 2);
-    // Empty object: `{}` — no useful detail to show.
-    if (s === "{}" || s === "[]") return "";
-    return s;
-  } catch {
-    return "";
-  }
+  // Inputs come from the SDK (already JSON-deserialized), so JSON.stringify
+  // can't hit a circular ref. Empty `{}` / `[]` carry no useful detail.
+  const s = JSON.stringify(input, null, 2);
+  if (s === "{}" || s === "[]") return "";
+  return s;
 }
 
 // Tiny dependency-free markdown renderer for profile.md content.

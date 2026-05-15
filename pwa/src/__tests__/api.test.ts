@@ -127,14 +127,15 @@ function makeSseResponse(frames: string[]): Response {
 }
 
 describe("api.chatStream", () => {
-  it("dispatches text/tool_start/tool_end/profile_changed/done events", async () => {
+  it("dispatches text/reasoning/tool_start/tool_end/profile_changed/done events", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         makeSseResponse([
+          'event: reasoning\ndata: {"delta":"…thinking…"}\n\n',
           'event: text\ndata: {"delta":"Hi"}\n\n',
           'event: tool_start\ndata: {"id":"t1","name":"add_source","input":{}}\n\n',
-          'event: tool_end\ndata: {"tool_use_id":"t1","ok":true}\n\n',
+          'event: tool_end\ndata: {"tool_use_id":"t1","ok":true,"output":"added"}\n\n',
           'event: profile_changed\ndata: {"by":"add_source"}\n\n',
           "event: heartbeat\ndata: {}\n\n",
           "event: done\ndata: {}\n\n",
@@ -144,10 +145,12 @@ describe("api.chatStream", () => {
 
     const events: string[] = [];
     const text: string[] = [];
+    const reasoning: string[] = [];
     const ctl = api.chatStream([{ role: "user", text: "hi" }], {
       onText: (d) => text.push(d),
+      onReasoning: (d) => reasoning.push(d),
       onToolStart: (t) => events.push(`start:${t.name}`),
-      onToolEnd: (t) => events.push(`end:${t.ok}`),
+      onToolEnd: (t) => events.push(`end:${t.ok}:${t.output ?? ""}`),
       onProfileChanged: (by) => events.push(`changed:${by}`),
       onDone: () => events.push("done"),
       onError: () => events.push("error"),
@@ -156,7 +159,8 @@ describe("api.chatStream", () => {
     // wait for the stream to drain
     await new Promise((r) => setTimeout(r, 10));
     expect(text).toEqual(["Hi"]);
-    expect(events).toEqual(["start:add_source", "end:true", "changed:add_source", "done"]);
+    expect(reasoning).toEqual(["…thinking…"]);
+    expect(events).toEqual(["start:add_source", "end:true:added", "changed:add_source", "done"]);
   });
 
   it("invokes onError when the server returns a non-OK response", async () => {
