@@ -121,6 +121,8 @@ def _build_run_record(
         record["submitted_item_ids"] = [
             i.get("id") for i in (state.submitted_items or []) if i.get("id")
         ]
+        if state.profile_snapshot:
+            record["profile_snapshot"] = state.profile_snapshot
     if triggering_feedback is not None:
         record["triggering_feedback"] = triggering_feedback
     if exit_reason is not None:

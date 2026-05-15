@@ -65,42 +65,6 @@ def test_runstate_record_strips_html_arg(store: Store) -> None:
 
 
 @pytest.mark.asyncio
-async def test_curation_read_recent_feedback_renders_events(store: Store) -> None:
-    state = _state(store)
-    store.append_feedback({"kind": "thumb", "value": "up", "item_id": "a"})
-    build_curation_tools(state)
-    out = await state.current_tools["read_recent_feedback"]({"days": 14})
-    text = out["content"][0]["text"]
-    assert '"kind": "thumb"' in text
-    assert text != "(no feedback yet)"
-
-
-@pytest.mark.asyncio
-async def test_curation_read_recent_feedback_empty(store: Store) -> None:
-    state = _state(store)
-    build_curation_tools(state)
-    out = await state.current_tools["read_recent_feedback"]({})
-    assert out["content"][0]["text"] == "(no feedback yet)"
-
-
-@pytest.mark.asyncio
-async def test_curation_read_recent_digests_empty_and_populated(store: Store) -> None:
-    state = _state(store)
-    build_curation_tools(state)
-
-    # Empty case
-    out = await state.current_tools["read_recent_digests"]({"days": 7})
-    assert out["content"][0]["text"] == "(none)"
-
-    today = datetime.now(UTC).date()
-    store.write_digest(
-        today, [{"id": "1", "title": "T", "source": "s.com", "url": "https://s.com/x"}], ""
-    )
-    out = await state.current_tools["read_recent_digests"]({"days": 7})
-    assert "T\ts.com" in out["content"][0]["text"]
-
-
-@pytest.mark.asyncio
 async def test_curation_list_sources_empty_and_populated(store: Store) -> None:
     state = _state(store)
     build_curation_tools(state)
@@ -478,6 +442,39 @@ def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
     assert state.curation_system_prompt
     assert opts.system_prompt == state.curation_system_prompt
     assert "mcp__digest__submit_digest" in opts.allowed_tools
+    # Read tools are now baked into the system prompt, not exposed as tools.
+    assert "mcp__digest__read_profile" not in opts.allowed_tools
+    assert "mcp__digest__read_recent_feedback" not in opts.allowed_tools
+    assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
+
+
+def test_curation_options_injects_profile_and_recent_digests(store: Store) -> None:
+    """Profile text and recent digest items (with feedback) must be substituted
+    into the system prompt so the agent has them up front."""
+    store.write_profile("# Profile\n- LLMs and woodworking\n")
+    today = datetime.now(UTC).date()
+    store.write_digest(
+        today,
+        [
+            {
+                "id": "abc12345",
+                "title": "A great post",
+                "source": "src.com",
+                "url": "https://src.com/a",
+                "feedback": "up",
+            }
+        ],
+        "",
+    )
+    state = RunState(store=store, today=today, run_id="rid")
+    opts = curation_options(state)
+    assert "LLMs and woodworking" in opts.system_prompt
+    assert "A great post" in opts.system_prompt
+    assert "src.com" in opts.system_prompt
+    assert "up" in opts.system_prompt
+    assert state.profile_snapshot.startswith("# Profile")
+    assert "{{PROFILE}}" not in opts.system_prompt
+    assert "{{RECENT_DIGESTS}}" not in opts.system_prompt
 
 
 def test_reflection_options_captures_system_prompt(store: Store) -> None:
