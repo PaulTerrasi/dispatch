@@ -48,6 +48,12 @@ describe("initViewportTracker", () => {
     expect(document.documentElement.style.getPropertyValue("--viewport-h")).toBe("480px");
     expect(addSpy).toHaveBeenCalledWith("resize", expect.any(Function));
 
+    const resizeCall = addSpy.mock.calls.find(([type]) => type === "resize");
+    const handler = resizeCall?.[1] as () => void;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 240 });
+    handler();
+    expect(document.documentElement.style.getPropertyValue("--viewport-h")).toBe("240px");
+
     addSpy.mockRestore();
   });
 });
