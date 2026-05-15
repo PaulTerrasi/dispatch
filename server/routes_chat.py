@@ -148,7 +148,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
     options = chat_options(state, profile_changed_q)
     cli_stderr_buffer: deque[str] = deque(maxlen=CLI_STDERR_BUFFER_LINES)
 
-    def _capture_stderr(line: str) -> None:
+    def _capture_stderr(line: str) -> None:  # pragma: no cover -- invoked by SDK
         cli_stderr_buffer.append(line)
         log.warning("claude_cli.stderr", line=line)
 
