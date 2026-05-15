@@ -659,6 +659,11 @@ body.chat-page .tabbar {
 body.chat-page {
   overflow: hidden;
   height: var(--viewport-h, 100dvh);
+  /* Body's normal `padding-top: env(safe-area-inset-top)` would shrink the
+     content box on notched phones while `main` is still sized to the full
+     `--viewport-h`, clipping the input bar off the bottom. The chat toolbar
+     applies its own safe-area-inset-top, so zero the body's contribution. */
+  padding-top: 0;
 }
 body.chat-page main {
   max-width: none;
