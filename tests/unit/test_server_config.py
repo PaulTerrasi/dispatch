@@ -4,6 +4,7 @@ SSM env-var resolution.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -96,8 +97,6 @@ def test_resolve_ssm_env_vars_replaces_path_with_secure_value(
     monkeypatch.setattr(config, "_read_ssm", _fake_read)
     config.resolve_ssm_env_vars()
 
-    import os
-
     assert os.environ["CLAUDE_CODE_OAUTH_TOKEN"] == "resolved-claude-oauth-token"
     # Literal value (does not start with '/') should not be rewritten.
     assert os.environ["MORNING_DIGEST_AUTH_TOKEN"] == "literal-not-ssm"
@@ -113,6 +112,38 @@ def test_resolve_ssm_env_vars_handles_missing_vars(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(config, "_read_ssm", _boom)
     config.resolve_ssm_env_vars()  # must not raise
+
+
+def test_resolve_ssm_env_vars_resolves_optional_nyt_cookies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("MORNING_DIGEST_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("NYT_COOKIES", "/morning-digest/nyt-cookies")
+    config._read_ssm.cache_clear()
+
+    monkeypatch.setattr(config, "_read_ssm", lambda _name: "NYT-S=abc; foo=bar")
+    config.resolve_ssm_env_vars()
+
+    assert os.environ["NYT_COOKIES"] == "NYT-S=abc; foo=bar"
+
+
+def test_resolve_ssm_env_vars_tolerates_missing_nyt_cookies_param(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NYT_COOKIES is optional — a ParameterNotFound must not crash cold start."""
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("MORNING_DIGEST_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("NYT_COOKIES", "/morning-digest/nyt-cookies")
+    config._read_ssm.cache_clear()
+
+    def _boom(_name: str) -> str:
+        raise RuntimeError("ParameterNotFound")
+
+    monkeypatch.setattr(config, "_read_ssm", _boom)
+    config.resolve_ssm_env_vars()  # must not raise
+
+    assert os.environ["NYT_COOKIES"] == ""
 
 
 def test_read_ssm_invokes_boto3(monkeypatch: pytest.MonkeyPatch) -> None:

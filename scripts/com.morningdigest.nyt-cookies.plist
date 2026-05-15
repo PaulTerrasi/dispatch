@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent: refresh NYT cookies in AWS SSM once per day.
+
+  To install:
+      1. Verify the script works first:
+             uv run scripts/refresh_nyt_cookies.py --dry-run
+             uv run scripts/refresh_nyt_cookies.py
+      2. Copy the plist into LaunchAgents and edit CHANGE_ME placeholders:
+             cp scripts/com.morningdigest.nyt-cookies.plist \
+                ~/Library/LaunchAgents/
+             # Edit ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
+             # and replace every CHANGE_ME with your actual paths/profile.
+      3. Load and fire one verification run:
+             launchctl load ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
+             launchctl start com.morningdigest.nyt-cookies
+             tail ~/Library/Logs/nyt-cookies-refresh.log
+
+  To verify the schedule is registered:
+      launchctl list | grep nyt-cookies
+
+  Loading does NOT fire a run on its own (RunAtLoad is false) — that way a
+  bad config doesn't write a traceback to the log on first install. Use
+  `launchctl start` whenever you want a one-off run outside the schedule.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.morningdigest.nyt-cookies</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Absolute path to `uv` (run `which uv` to find yours). -->
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <!-- Absolute path to this script in your local dispatch checkout. -->
+        <string>/Users/CHANGE_ME/dispatch/scripts/refresh_nyt_cookies.py</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Don't fire on `launchctl load`; a misconfigured first run would
+         write a traceback to the log before the user has a chance to verify.
+         Use `launchctl start com.morningdigest.nyt-cookies` for a one-off run. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- launchd does NOT inherit your shell PATH. Include uv's dir and
+             anything else the script needs. -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- AWS_PROFILE picks which ~/.aws/credentials profile to use.
+             Drop this line to use the default profile / env vars. -->
+        <key>AWS_PROFILE</key>
+        <string>CHANGE_ME</string>
+        <!-- HOME is needed by boto3 to find ~/.aws and by browser-cookie3
+             to find browser profiles. -->
+        <key>HOME</key>
+        <string>/Users/CHANGE_ME</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/CHANGE_ME/Library/Logs/nyt-cookies-refresh.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/CHANGE_ME/Library/Logs/nyt-cookies-refresh.log</string>
+</dict>
+</plist>

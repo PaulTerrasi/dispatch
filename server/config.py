@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from digest.s3_store import S3Store
@@ -67,8 +70,32 @@ def resolve_ssm_env_vars() -> None:
     Called once at Lambda/Fargate cold start. Env vars like
     CLAUDE_CODE_OAUTH_TOKEN=/morning-digest/claude-oauth-token are resolved
     in-place so the Claude SDK and middleware can read them normally.
+
+    NYT_COOKIES is optional — the SSM param may not exist yet (it's populated
+    out-of-band from a local cookie-refresh job). Treat a missing param as
+    empty rather than crashing the cold start.
     """
-    for key in ("CLAUDE_CODE_OAUTH_TOKEN", "MORNING_DIGEST_AUTH_TOKEN"):
+    required = ("CLAUDE_CODE_OAUTH_TOKEN", "MORNING_DIGEST_AUTH_TOKEN")
+    optional = ("NYT_COOKIES",)
+    for key in required:
         val = os.environ.get(key, "")
         if val.startswith("/"):
             os.environ[key] = _read_ssm(val)
+    for key in optional:
+        val = os.environ.get(key, "")
+        if val.startswith("/"):
+            try:
+                os.environ[key] = _read_ssm(val)
+            except Exception as exc:
+                # ParameterNotFound is the expected case before the cookie
+                # refresh job has populated SSM for the first time. Log
+                # everything else (e.g. AccessDeniedException from a wrong IAM
+                # policy) so cold-start misconfiguration surfaces in CloudWatch.
+                log.warning(
+                    "optional SSM param %s for env var %s could not be read (%s); "
+                    "proceeding with empty value",
+                    val,
+                    key,
+                    exc,
+                )
+                os.environ[key] = ""

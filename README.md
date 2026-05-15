@@ -23,7 +23,8 @@ See [the design doc](docs/plan.md) for the full architecture.
                                        S3 data bucket  ◀── Lambda reads here too
 
        SSM Parameter Store: /morning-digest/claude-oauth-token,
-                            /morning-digest/auth-token
+                            /morning-digest/auth-token,
+                            /morning-digest/nyt-cookies   (optional)
                             (resolved at Lambda/Fargate cold start)
 ```
 
@@ -113,6 +114,45 @@ aws ssm put-parameter --name /morning-digest/claude-oauth-token \
 Lambda and Fargate read SSM at cold start, so new invocations pick up the
 new value automatically. To force an immediate rotation, redeploy the Lambda
 (`make deploy-infra`) — that recycles all warm containers.
+
+## NYT subscription cookies (optional)
+
+The curation agent can read paywalled `nytimes.com` articles if you give it
+a session cookie. This is optional — without it, fetches to nytimes.com just
+return paywall stubs and the agent moves on.
+
+How it works:
+
+- The runtime reads SSM SecureString `/morning-digest/nyt-cookies` (a raw
+  `Cookie:` header value: `name=value; name=value`) into the `NYT_COOKIES`
+  env var at cold start.
+- `digest/tools/web_fetch.py` puts those cookies into an httpx jar scoped to
+  `.nytimes.com`, so they're only sent on requests to nytimes.com hosts.
+- NYT cookies auto-extend on every visit, so a daily refresh from a browser
+  you're logged into keeps SSM fresh indefinitely — no server-side login
+  automation (which NYT blocks).
+
+To set it up, run `scripts/refresh_nyt_cookies.py` from a machine where
+you're logged into NYT in a browser. Manually first:
+
+```bash
+uv run scripts/refresh_nyt_cookies.py --dry-run   # confirm cookies extract
+uv run scripts/refresh_nyt_cookies.py             # write to SSM
+```
+
+Then put it on a daily schedule:
+
+- **macOS**: edit `scripts/com.morningdigest.nyt-cookies.plist`
+  (replace the `CHANGE_ME` placeholders), copy it to
+  `~/Library/LaunchAgents/`, and `launchctl load` it. The plist does not
+  fire on load, so kick the first run with
+  `launchctl start com.morningdigest.nyt-cookies`.
+- **Linux**: `crontab -e` and add
+  `0 7 * * * cd /path/to/dispatch && uv run scripts/refresh_nyt_cookies.py`.
+
+If NYT logs you out, the next run will fail with a clear error — just log
+back in to fix it. The runtime tolerates a missing or empty parameter, so
+NYT-cookie outages never break a deploy or a curation run.
 
 ## Layout
 
