@@ -656,6 +656,14 @@ body.chat-page .tabbar {
 }
 
 /* Chat-page full-viewport layout (resizable split) */
+html:has(body.chat-page) {
+  /* Pin the root on chat-page only so iOS Safari can't auto-scroll the
+     document to bring a focused input into view when the keyboard opens —
+     that's what makes the "static" header appear to slide up. Other pages
+     still scroll normally (and pull-to-refresh on /today keeps working). */
+  overflow: hidden;
+  height: 100%;
+}
 body.chat-page {
   overflow: hidden;
   height: var(--viewport-h, 100dvh);
