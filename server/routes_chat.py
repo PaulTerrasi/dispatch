@@ -119,9 +119,7 @@ def _translate(msg: Any) -> list[bytes]:
                 if text:
                     out.append(_sse("text", {"delta": text}))
             elif delta.get("type") == "thinking_delta":
-                # Anthropic API carries reasoning text in the "thinking" field;
-                # accept "text" too for cross-version safety.
-                text = delta.get("thinking") or delta.get("text") or ""
+                text = delta.get("thinking") or ""
                 if text:
                     out.append(_sse("reasoning", {"delta": text}))
         return out

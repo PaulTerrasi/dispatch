@@ -367,7 +367,6 @@ export async function renderChat(): Promise<HTMLElement> {
         }
         currentAssistantMsg.text += delta;
         currentAssistantEl!.textContent = currentAssistantMsg.text;
-        currentAssistantEl!.classList.add("streaming");
         currentAssistantEl!.scrollIntoView({ block: "end" });
         persistItems(items);
       },
