@@ -588,11 +588,10 @@ async def test_reflection_read_recent_digests(store: Store) -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_triggering_curation_run_scans_legacy_tool_log(store: Store) -> None:
-    """When `submitted_item_ids` is missing, the tool falls back to scanning
-    `tool_log` entries for a `submit_digest` call. Per the implementation note
-    this is best-effort and currently doesn't extract ids — so even with a
-    submit_digest entry present, the scan completes without a match."""
+async def test_read_triggering_curation_run_skips_legacy_runs(store: Store) -> None:
+    """Legacy curation runs (no `submitted_item_ids` field) can't be matched —
+    the recorded args carry only a "count", not the item ids, and there's no
+    reverse index. The tool skips such runs and returns the not-found sentinel."""
     store.append_run(
         {
             "run_id": "old",

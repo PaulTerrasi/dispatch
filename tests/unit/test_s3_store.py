@@ -543,15 +543,18 @@ class _FakeS3:
 
 
 @pytest.fixture
-def fake_store() -> S3Store:
-    """An S3Store with the boto3 client swapped for the in-memory _FakeS3."""
-    s = S3Store.__new__(S3Store)
-    s.bucket = "fake"
-    s.s3 = _FakeS3()  # type: ignore[assignment]
-    s._digest_cache = {}  # type: ignore[attr-defined]
-    s._list_cache = None  # type: ignore[attr-defined]
-    s._list_cache_ts = 0.0  # type: ignore[attr-defined]
-    return s
+def fake_store(monkeypatch: pytest.MonkeyPatch) -> S3Store:
+    """An S3Store wired to the in-memory `_FakeS3` instead of real boto3.
+
+    We swap `boto3.client` at import time so the regular `S3Store.__init__`
+    runs and seeds every instance attribute (cache, list-cache TTL, etc.).
+    Manually building the store via `__new__` would silently miss any new
+    attribute the class gains, which is harder to debug than a clean init.
+    """
+    # boto3 is imported lazily inside S3Store.__init__, so patch on the
+    # top-level boto3 module directly.
+    monkeypatch.setattr(boto3, "client", lambda *_a, **_k: _FakeS3())
+    return S3Store("fake")
 
 
 def test_lock_acquire_creates_then_blocks_then_releases(fake_store: S3Store) -> None:
