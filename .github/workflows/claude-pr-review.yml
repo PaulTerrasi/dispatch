@@ -26,6 +26,7 @@ jobs:
 
       - name: Claude code review
         id: claude
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -49,7 +50,13 @@ jobs:
                  Python deps via pyproject + uv.lock
                - Test coverage for new behavior
             3. Use the `Write` tool to create
-               `${{ github.workspace }}/review.json` with this exact shape:
+               `${{ github.workspace }}/review.json` with this exact shape.
+               The file MUST be valid JSON parseable by `jq`: use straight
+               ASCII double quotes, escape every newline inside a string as
+               `\n` (no raw newlines inside `"..."`), escape backslashes and
+               embedded quotes, no trailing commas, no comments, no
+               thousands separators inside numbers (`"line": 1234`, not
+               `1,234`). Do not wrap the file in markdown fences.
 
                  {
                    "body": "<concise markdown summary grouped by severity>",
@@ -97,21 +104,66 @@ jobs:
             echo "No review payload at $PAYLOAD; skipping post."
             exit 0
           fi
-          if ! jq -e . "$PAYLOAD" >/dev/null; then
-            echo "Payload is not valid JSON:"
+
+          # Try to normalize the payload into valid JSON. Claude
+          # occasionally emits markdown fences, smart quotes, or trailing
+          # commas; rather than fail the whole job we attempt a repair and
+          # fall back to posting an issue comment with the raw text.
+          CLEAN=/tmp/review-clean.json
+          set +e
+          python3 - "$PAYLOAD" "$CLEAN" <<'PY'
+          import json, re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          with open(src, "r", encoding="utf-8", errors="replace") as f:
+              text = f.read()
+          # Strip surrounding markdown fences if present.
+          text = re.sub(r"^\s*```(?:json)?\s*", "", text)
+          text = re.sub(r"\s*```\s*$", "", text)
+          # First try as-is.
+          try:
+              obj = json.loads(text)
+          except Exception:
+              # Light repairs: remove trailing commas before } or ].
+              repaired = re.sub(r",(\s*[}\]])", r"\1", text)
+              try:
+                  obj = json.loads(repaired)
+              except Exception as e:
+                  print(f"::warning::payload still invalid after repair: {e}", file=sys.stderr)
+                  sys.exit(2)
+          with open(dst, "w", encoding="utf-8") as f:
+              json.dump(obj, f, ensure_ascii=False)
+          PY
+          repair_rc=$?
+          set -e
+          if [ "$repair_rc" -ne 0 ]; then
+            echo "Payload is not valid JSON; falling back to issue comment."
+            echo "--- raw payload ---"
             cat "$PAYLOAD"
-            exit 1
+            echo
+            echo "--- end raw payload ---"
+            {
+              echo "Claude PR review produced output that was not valid JSON, so inline review posting was skipped. Raw output below:"
+              echo
+              echo '```'
+              # Truncate to keep the comment under GitHub's 64 KiB limit.
+              head -c 60000 "$PAYLOAD"
+              echo
+              echo '```'
+            } > /tmp/review-raw-comment.md
+            gh pr comment "$PR" --repo "$REPO" --body-file /tmp/review-raw-comment.md
+            exit 0
           fi
+
           echo "Submitting review (with inline comments)..."
           echo "--- payload (comment anchors) ---"
-          jq '{body_len: (.body | length), event, comments: [.comments[] | {path, line, side, start_line, start_side}]}' "$PAYLOAD"
+          jq '{body_len: (.body | length), event, comments: [(.comments // [])[] | {path, line, side, start_line, start_side}]}' "$CLEAN"
           echo "--- end payload ---"
           http_status=$(curl -sS -o /tmp/review-resp.json -w '%{http_code}' \
             -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            --data-binary @"$PAYLOAD" \
+            --data-binary @"$CLEAN" \
             "https://api.github.com/repos/$REPO/pulls/$PR/reviews") || http_status=000
           echo "POST /reviews -> HTTP $http_status"
           if [ "$http_status" = "200" ] || [ "$http_status" = "201" ]; then
@@ -125,9 +177,13 @@ jobs:
           # on the PR even if one or more inline positions were rejected.
           echo "Falling back to comment-only review."
           jq '{body: ((.body // "") + "\n\n_(inline comments could not be attached; see workflow log for details)_"), event: "COMMENT"}' \
-            "$PAYLOAD" > /tmp/review-fallback.json
-          gh api --method POST "repos/$REPO/pulls/$PR/reviews" \
-            --input /tmp/review-fallback.json
+            "$CLEAN" > /tmp/review-fallback.json
+          if ! gh api --method POST "repos/$REPO/pulls/$PR/reviews" \
+              --input /tmp/review-fallback.json; then
+            echo "Comment-only review also failed; posting as an issue comment instead."
+            jq -r '.body' /tmp/review-fallback.json > /tmp/review-issue-body.md
+            gh pr comment "$PR" --repo "$REPO" --body-file /tmp/review-issue-body.md
+          fi
 
       - name: Verify Claude posted something
         if: always()
