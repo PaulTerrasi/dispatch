@@ -172,10 +172,10 @@ function renderSummary(text: string, more: string | null): HTMLElement {
   toggle.textContent = "show more";
   toggle.setAttribute("aria-expanded", "false");
   toggle.onclick = () => {
-    const expanded = cont.hidden;
-    cont.hidden = !expanded;
-    toggle.textContent = expanded ? "show less" : "show more";
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const nowExpanded = cont.hidden;
+    cont.hidden = !nowExpanded;
+    toggle.textContent = nowExpanded ? "show less" : "show more";
+    toggle.setAttribute("aria-expanded", nowExpanded ? "true" : "false");
   };
   wrap.appendChild(toggle);
 

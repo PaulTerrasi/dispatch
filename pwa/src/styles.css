@@ -366,12 +366,11 @@ body.chat-page .tabbar {
 .item .summary {
   margin: 6px 0 10px 0;
 }
-.item .summary .summary-text,
-.item .summary .summary-more {
+.item .summary .summary-text {
   margin: 0;
 }
 .item .summary .summary-more {
-  margin-top: 6px;
+  margin: 6px 0 0 0;
 }
 .item .summary-toggle {
   margin-top: 6px;
