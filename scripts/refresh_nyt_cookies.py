@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -40,7 +41,10 @@ import boto3
 import browser_cookie3
 
 SSM_PARAM = "/morning-digest/nyt-cookies"
-REGION = "us-east-1"
+# Region follows the standard AWS env vars when set, otherwise falls back to
+# the stack's home region. A --region flag would be overkill — `AWS_REGION=…
+# uv run scripts/refresh_nyt_cookies.py` is the same number of keystrokes.
+DEFAULT_REGION = "us-east-1"
 
 # Order is the auto-detect priority when --browser isn't given.
 BROWSER_LOADERS: dict[str, Callable[..., Any]] = {
@@ -125,13 +129,14 @@ def main() -> int:
         log.info("dry-run: would write %d chars to %s", len(cookies), SSM_PARAM)
         return 0
 
-    ssm = boto3.client("ssm", region_name=REGION)
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or DEFAULT_REGION
+    ssm = boto3.client("ssm", region_name=region)
     if current_ssm_value(ssm) == cookies:
         log.info("SSM %s already current; skipping write", SSM_PARAM)
         return 0
 
     ssm.put_parameter(Name=SSM_PARAM, Value=cookies, Type="SecureString", Overwrite=True)
-    log.info("wrote %d chars to SSM %s", len(cookies), SSM_PARAM)
+    log.info("wrote %d chars to SSM %s in %s", len(cookies), SSM_PARAM, region)
     return 0
 
 

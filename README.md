@@ -144,7 +144,9 @@ Then put it on a daily schedule:
 
 - **macOS**: edit `scripts/com.morningdigest.nyt-cookies.plist`
   (replace the `CHANGE_ME` placeholders), copy it to
-  `~/Library/LaunchAgents/`, and `launchctl load` it.
+  `~/Library/LaunchAgents/`, and `launchctl load` it. The plist does not
+  fire on load, so kick the first run with
+  `launchctl start com.morningdigest.nyt-cookies`.
 - **Linux**: `crontab -e` and add
   `0 7 * * * cd /path/to/dispatch && uv run scripts/refresh_nyt_cookies.py`.
 

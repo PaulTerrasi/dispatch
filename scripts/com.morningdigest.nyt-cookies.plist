@@ -2,19 +2,26 @@
 <!--
   macOS launchd agent: refresh NYT cookies in AWS SSM once per day.
 
-  To install (replace CHANGE_ME placeholders first):
+  To install:
+      1. Verify the script works first:
+             uv run scripts/refresh_nyt_cookies.py --dry-run
+             uv run scripts/refresh_nyt_cookies.py
+      2. Copy the plist into LaunchAgents and edit CHANGE_ME placeholders:
+             cp scripts/com.morningdigest.nyt-cookies.plist \
+                ~/Library/LaunchAgents/
+             # Edit ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
+             # and replace every CHANGE_ME with your actual paths/profile.
+      3. Load and fire one verification run:
+             launchctl load ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
+             launchctl start com.morningdigest.nyt-cookies
+             tail ~/Library/Logs/nyt-cookies-refresh.log
 
-      cp scripts/com.morningdigest.nyt-cookies.plist ~/Library/LaunchAgents/
-      # Edit ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
-      # and replace every CHANGE_ME with your actual paths/profile.
-      launchctl load ~/Library/LaunchAgents/com.morningdigest.nyt-cookies.plist
-
-  To verify:
+  To verify the schedule is registered:
       launchctl list | grep nyt-cookies
-      tail -f ~/Library/Logs/nyt-cookies-refresh.log
 
-  To run on-demand without waiting for the schedule:
-      launchctl start com.morningdigest.nyt-cookies
+  Loading does NOT fire a run on its own (RunAtLoad is false) — that way a
+  bad config doesn't write a traceback to the log on first install. Use
+  `launchctl start` whenever you want a one-off run outside the schedule.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -39,9 +46,11 @@
         <integer>0</integer>
     </dict>
 
-    <!-- Run once on load so you can verify the install without waiting. -->
+    <!-- Don't fire on `launchctl load`; a misconfigured first run would
+         write a traceback to the log before the user has a chance to verify.
+         Use `launchctl start com.morningdigest.nyt-cookies` for a one-off run. -->
     <key>RunAtLoad</key>
-    <true/>
+    <false/>
 
     <key>EnvironmentVariables</key>
     <dict>
