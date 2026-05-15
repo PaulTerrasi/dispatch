@@ -58,7 +58,7 @@ want it now.
      1–2 additional sentences that pick up where `summary` left off — extra
      detail, caveats, or context. Do **not** repeat what's in `summary`.
      Reads naturally as a continuation, not a second standalone blurb. Omit
-     (empty string) only if there is genuinely nothing more worth saying.
+     the field only if there is genuinely nothing more worth saying.
 
 6. **Submit.** Call `submit_digest(items, agent_notes)`. `agent_notes` is one
    short paragraph on what you considered, why you cut what you cut, and any

@@ -258,7 +258,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     @tool(
         "submit_digest",
         "Submit today's curated digest. Items: array of "
-        "{type, title, source, url, summary, summary_more, duration_min?}. "
+        "{type, title, source, url, summary, summary_more?, duration_min?}. "
         "`summary` is the short hook shown by default (1-2 sentences); "
         "`summary_more` is the continuation revealed on expand (1-2 more sentences). "
         "agent_notes: one short paragraph on what you considered and cut.",
