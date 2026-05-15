@@ -81,12 +81,41 @@ def _sse(event: str, data: dict[str, Any]) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n".encode()
 
 
+TOOL_OUTPUT_MAX_CHARS = 4000
+
+
+def _tool_result_text(content: Any) -> str:
+    """Best-effort extraction of human-readable text from a ToolResultBlock's
+    `content`, capped so we don't bloat the SSE stream with large blobs."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        # List-shaped tool results are sequences of typed content blocks.
+        # We only surface text blocks here — non-dict entries and dicts
+        # without a string "text" field (e.g. image content) are dropped,
+        # since the chat UI has no way to display them inline.
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                t = item.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+        text = "\n".join(parts)
+    else:
+        text = ""
+    if len(text) > TOOL_OUTPUT_MAX_CHARS:
+        text = text[:TOOL_OUTPUT_MAX_CHARS] + "\n…(truncated)"
+    return text
+
+
 def _translate(msg: Any) -> list[bytes]:
     """Translate one SDK output item into zero or more SSE frames.
 
-    StreamEvent → token-level `text` deltas (skipping thinking deltas).
+    StreamEvent → token-level `text` / `reasoning` deltas.
     AssistantMessage → `tool_start` per ToolUseBlock (we have args here).
-    UserMessage → `tool_end` per ToolResultBlock.
+    UserMessage → `tool_end` per ToolResultBlock (with truncated output text).
     Other message types are dropped — the SSE generator emits `done` itself.
     """
     out: list[bytes] = []
@@ -98,6 +127,10 @@ def _translate(msg: Any) -> list[bytes]:
                 text = delta.get("text") or ""
                 if text:
                     out.append(_sse("text", {"delta": text}))
+            elif delta.get("type") == "thinking_delta":
+                text = delta.get("thinking") or ""
+                if text:
+                    out.append(_sse("reasoning", {"delta": text}))
         return out
     if isinstance(msg, AssistantMessage):
         for block in msg.content:
@@ -115,15 +148,14 @@ def _translate(msg: Any) -> list[bytes]:
         content = msg.content if isinstance(msg.content, list) else []
         for block in content:
             if isinstance(block, ToolResultBlock):
-                out.append(
-                    _sse(
-                        "tool_end",
-                        {
-                            "tool_use_id": block.tool_use_id,
-                            "ok": not bool(block.is_error),
-                        },
-                    )
-                )
+                payload: dict[str, Any] = {
+                    "tool_use_id": block.tool_use_id,
+                    "ok": not bool(block.is_error),
+                }
+                output = _tool_result_text(block.content)
+                if output:
+                    payload["output"] = output
+                out.append(_sse("tool_end", payload))
         return out
     return out
 

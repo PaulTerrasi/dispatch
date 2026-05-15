@@ -5,10 +5,14 @@ type MsgItem = { kind: "msg"; role: "user" | "assistant"; text: string };
 type ToolItem = {
   kind: "tool";
   id: string;
+  name: string;
   label: string;
+  input?: unknown;
+  output?: string;
   status: "pending" | "ok" | "err";
 };
-type Item = MsgItem | ToolItem;
+type ReasoningItem = { kind: "reasoning"; text: string };
+type Item = MsgItem | ToolItem | ReasoningItem;
 
 const COLLAPSED_KEY = "chat:profile-collapsed";
 const TURNS_KEY = "chat:turns";
@@ -43,8 +47,19 @@ function loadItems(): Item[] {
         typeof t.label === "string" &&
         (t.status === "pending" || t.status === "ok" || t.status === "err")
       ) {
-        out.push({ kind: "tool", id: t.id, label: t.label, status: t.status });
+        const item: ToolItem = {
+          kind: "tool",
+          id: t.id,
+          name: typeof t.name === "string" ? t.name : "",
+          label: t.label,
+          status: t.status,
+        };
+        if (t.input !== undefined) item.input = t.input;
+        if (typeof t.output === "string") item.output = t.output;
+        out.push(item);
       }
+      // Reasoning items are never persisted (see `persistItems`); any legacy
+      // `{ kind: "reasoning" }` entries are silently dropped.
     }
     return out;
   } catch {
@@ -54,7 +69,12 @@ function loadItems(): Item[] {
 
 function persistItems(items: Item[]): void {
   try {
-    localStorage.setItem(TURNS_KEY, JSON.stringify(items));
+    // Reasoning is display-only — it doesn't ride along in the conversation
+    // history sent to the model, and an extended-thinking turn can produce
+    // tens of KB of deltas. Skip it to keep localStorage bounded and avoid
+    // write amplification on every reasoning delta.
+    const persistable = items.filter((it) => it.kind !== "reasoning");
+    localStorage.setItem(TURNS_KEY, JSON.stringify(persistable));
   } catch {
     // ignore quota / serialization errors
   }
@@ -190,24 +210,127 @@ export async function renderChat(): Promise<HTMLElement> {
     return div;
   };
 
-  const appendStatus = (text: string): HTMLElement => {
-    const pill = document.createElement("div");
-    pill.className = "chat-tool-pill";
-    pill.textContent = text;
-    transcript.appendChild(pill);
-    pill.scrollIntoView({ block: "end" });
-    return pill;
+  const appendTool = (tool: ToolItem): HTMLElement => {
+    const card = document.createElement("div");
+    card.className = `chat-tool-card ${tool.status}`;
+
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "chat-tool-card-header";
+
+    const icon = document.createElement("span");
+    icon.className = "chat-tool-card-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = toolIcon(tool.name);
+    header.appendChild(icon);
+
+    const label = document.createElement("span");
+    label.className = "chat-tool-card-label";
+    label.textContent = tool.label;
+    header.appendChild(label);
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "chat-tool-card-status";
+    statusEl.textContent = toolStatusText(tool.status);
+    header.appendChild(statusEl);
+
+    const chevron = document.createElement("span");
+    chevron.className = "chat-tool-card-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "›";
+    header.appendChild(chevron);
+
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "chat-tool-card-body";
+    card.appendChild(body);
+    renderToolBody(body, tool);
+
+    header.addEventListener("click", () => {
+      card.classList.toggle("expanded");
+    });
+
+    transcript.appendChild(card);
+    card.scrollIntoView({ block: "end" });
+    return card;
+  };
+
+  const updateToolCard = (card: HTMLElement, tool: ToolItem): void => {
+    card.classList.remove("pending", "ok", "err");
+    card.classList.add(tool.status);
+    const statusEl = card.querySelector(".chat-tool-card-status");
+    if (statusEl) statusEl.textContent = toolStatusText(tool.status);
+    const body = card.querySelector(".chat-tool-card-body") as HTMLElement | null;
+    if (body) renderToolBody(body, tool);
+  };
+
+  const appendReasoning = (item: ReasoningItem): HTMLElement => {
+    const card = document.createElement("div");
+    card.className = "chat-reasoning";
+
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "chat-reasoning-header";
+
+    const chevron = document.createElement("span");
+    chevron.className = "chat-reasoning-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "›";
+    header.appendChild(chevron);
+
+    const label = document.createElement("span");
+    label.className = "chat-reasoning-label";
+    label.textContent = "Thinking";
+    header.appendChild(label);
+
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "chat-reasoning-body";
+    body.textContent = item.text;
+    card.appendChild(body);
+
+    header.addEventListener("click", () => {
+      card.classList.toggle("expanded");
+    });
+
+    transcript.appendChild(card);
+    card.scrollIntoView({ block: "end" });
+    return card;
+  };
+
+  // Loading indicator: three pulsing dots, shown whenever the agent is
+  // working but not currently streaming text or reasoning. Created once
+  // and re-parented to the end of the transcript when needed.
+  let loadingEl: HTMLElement | null = null;
+  const ensureLoading = (): void => {
+    if (!loadingEl) {
+      loadingEl = document.createElement("div");
+      loadingEl.className = "chat-loading";
+      loadingEl.setAttribute("aria-label", "Agent is working");
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement("span");
+        dot.className = "chat-loading-dot";
+        loadingEl.appendChild(dot);
+      }
+    }
+    transcript.appendChild(loadingEl);
+    loadingEl.scrollIntoView({ block: "end" });
+  };
+  const hideLoading = (): void => {
+    if (loadingEl && loadingEl.parentElement) loadingEl.remove();
   };
 
   // Replay persisted conversation, if any.
   for (const it of items) {
     if (it.kind === "msg") {
       appendMessage(it);
-    } else {
-      const pill = appendStatus(it.label);
-      if (it.status === "ok") pill.classList.add("ok");
-      else if (it.status === "err") pill.classList.add("err");
+    } else if (it.kind === "tool") {
+      appendTool(it);
     }
+    // Reasoning items are never persisted (see `persistItems`); they can
+    // only enter `items` during the live stream, never via replay.
   }
 
   const onSend = (): void => {
@@ -220,69 +343,117 @@ export async function renderChat(): Promise<HTMLElement> {
     ta.value = "";
     send.disabled = true;
 
-    // The backend expects history to end with a user turn — snapshot it now
-    // (messages only, no tool entries) before we append the assistant
-    // placeholder below.
+    // Snapshot history (messages only) before any agent output arrives. The
+    // backend expects history to end with a user turn.
     const requestHistory = items
       .filter((it): it is MsgItem => it.kind === "msg")
       .map(({ role, text }) => ({ role, text }));
 
-    // Push the assistant placeholder into `items` up-front so partial replies
-    // are persisted incrementally — a mid-stream reload (or a missing `done`
-    // event) still preserves whatever text streamed in.
-    const assistantMsg: MsgItem = { kind: "msg", role: "assistant", text: "" };
-    items.push(assistantMsg);
-    const assistantEl = appendMessage(assistantMsg);
-    const toolPills = new Map<string, { el: HTMLElement; item: ToolItem }>();
+    // Lazy assistant / reasoning cursors. We don't create the assistant
+    // bubble up front — only when text actually starts streaming — so a
+    // tool call before any output doesn't leave an empty bubble behind.
+    let currentAssistantMsg: MsgItem | null = null;
+    let currentAssistantEl: HTMLElement | null = null;
+    let currentReasoningItem: ReasoningItem | null = null;
+    let currentReasoningEl: HTMLElement | null = null;
+    const toolCards = new Map<string, { el: HTMLElement; item: ToolItem }>();
 
-    const dropEmptyAssistant = (): void => {
-      if (assistantMsg.text) return;
-      const idx = items.indexOf(assistantMsg);
-      if (idx !== -1) {
-        items.splice(idx, 1);
-        assistantEl.remove();
-      }
+    const finalizeAssistant = (): void => {
+      if (currentAssistantEl) currentAssistantEl.classList.remove("streaming");
+      currentAssistantMsg = null;
+      currentAssistantEl = null;
     };
+    const finalizeReasoning = (): void => {
+      if (currentReasoningEl) currentReasoningEl.classList.remove("streaming");
+      currentReasoningItem = null;
+      currentReasoningEl = null;
+    };
+
+    ensureLoading();
 
     const handlers: ChatStreamHandlers = {
       onText: (delta) => {
-        assistantMsg.text += delta;
-        assistantEl.textContent = assistantMsg.text;
-        assistantEl.scrollIntoView({ block: "end" });
+        finalizeReasoning();
+        hideLoading();
+        if (!currentAssistantMsg) {
+          currentAssistantMsg = { kind: "msg", role: "assistant", text: "" };
+          items.push(currentAssistantMsg);
+          currentAssistantEl = appendMessage(currentAssistantMsg);
+          currentAssistantEl.classList.add("streaming");
+        }
+        currentAssistantMsg.text += delta;
+        currentAssistantEl!.textContent = currentAssistantMsg.text;
+        currentAssistantEl!.scrollIntoView({ block: "end" });
         persistItems(items);
       },
+      onReasoning: (delta) => {
+        finalizeAssistant();
+        hideLoading();
+        if (!currentReasoningItem) {
+          currentReasoningItem = { kind: "reasoning", text: "" };
+          items.push(currentReasoningItem);
+          currentReasoningEl = appendReasoning(currentReasoningItem);
+          currentReasoningEl.classList.add("streaming");
+        }
+        currentReasoningItem.text += delta;
+        const body = currentReasoningEl!.querySelector(
+          ".chat-reasoning-body",
+        ) as HTMLElement | null;
+        // Append a new text node rather than re-setting `body.textContent` to
+        // the full accumulated string — extended thinking can emit tens of KB
+        // of deltas and rewriting the full text on each one is O(N²).
+        if (body) body.appendChild(document.createTextNode(delta));
+        currentReasoningEl!.scrollIntoView({ block: "end" });
+        // No persist: reasoning is filtered out of localStorage anyway, and
+        // the next text/tool event (or onDone) will flush the real state.
+      },
       onToolStart: (tool) => {
+        finalizeAssistant();
+        finalizeReasoning();
         const label = prettyToolStart(tool.name, tool.input);
         const toolItem: ToolItem = {
           kind: "tool",
           id: tool.id,
+          name: tool.name,
           label,
+          input: tool.input,
           status: "pending",
         };
         items.push(toolItem);
-        const pill = appendStatus(label);
-        toolPills.set(tool.id, { el: pill, item: toolItem });
+        const card = appendTool(toolItem);
+        toolCards.set(tool.id, { el: card, item: toolItem });
         persistItems(items);
+        ensureLoading();
       },
       onToolEnd: (tool) => {
-        const entry = toolPills.get(tool.tool_use_id);
+        const entry = toolCards.get(tool.tool_use_id);
         if (entry) {
           entry.item.status = tool.ok ? "ok" : "err";
-          entry.el.classList.add(tool.ok ? "ok" : "err");
+          if (typeof tool.output === "string") entry.item.output = tool.output;
+          updateToolCard(entry.el, entry.item);
           persistItems(items);
         }
+        ensureLoading();
       },
       onProfileChanged: () => {
         void refreshProfile();
       },
       onDone: () => {
-        dropEmptyAssistant();
+        finalizeAssistant();
+        finalizeReasoning();
+        hideLoading();
         persistItems(items);
         finish();
       },
       onError: (message) => {
-        appendStatus(`error: ${message}`).classList.add("err");
-        dropEmptyAssistant();
+        finalizeAssistant();
+        finalizeReasoning();
+        hideLoading();
+        const errEl = document.createElement("div");
+        errEl.className = "chat-error";
+        errEl.textContent = `error: ${message}`;
+        transcript.appendChild(errEl);
+        errEl.scrollIntoView({ block: "end" });
         persistItems(items);
         finish();
       },
@@ -304,6 +475,7 @@ export async function renderChat(): Promise<HTMLElement> {
     }
     items.length = 0;
     localStorage.removeItem(TURNS_KEY);
+    hideLoading();
     transcript.replaceChildren(intro);
     send.disabled = false;
     ta.focus();
@@ -353,26 +525,99 @@ function renderChatHeader(): { bar: HTMLElement; profileToggleBtn: HTMLButtonEle
 function prettyToolStart(name: string, _input: unknown): string {
   switch (name) {
     case "patch_profile":
-      return "✏️ editing profile.md…";
+      return "editing profile.md";
     case "add_source":
-      return "➕ adding source…";
+      return "adding source";
     case "remove_source":
-      return "➖ removing source…";
+      return "removing source";
     case "read_profile":
-      return "👀 reading profile…";
+      return "reading profile";
     case "read_recent_feedback":
-      return "👀 reading recent feedback…";
+      return "reading recent feedback";
     case "read_recent_digests":
-      return "👀 reading recent digests…";
+      return "reading recent digests";
     case "read_recent_curation_runs":
-      return "👀 reading curation runs…";
+      return "reading curation runs";
     case "list_sources":
-      return "👀 listing sources…";
+      return "listing sources";
     case "end_reflection":
-      return "✓ wrapping up";
+      return "wrapping up";
     default:
-      return `· ${prettyToolName(name)}`;
+      return prettyToolName(name) || "tool call";
   }
+}
+
+function toolIcon(name: string): string {
+  switch (name) {
+    case "patch_profile":
+      return "✏️";
+    case "add_source":
+      return "➕";
+    case "remove_source":
+      return "➖";
+    case "end_reflection":
+      return "✓";
+    case "read_profile":
+    case "read_recent_feedback":
+    case "read_recent_digests":
+    case "read_recent_curation_runs":
+    case "list_sources":
+      return "👀";
+    default:
+      return "·";
+  }
+}
+
+function toolStatusText(status: ToolItem["status"]): string {
+  switch (status) {
+    case "pending":
+      return "running…";
+    case "ok":
+      return "done";
+    case "err":
+      return "failed";
+  }
+}
+
+function renderToolBody(body: HTMLElement, tool: ToolItem): void {
+  body.replaceChildren();
+  const inputStr = formatToolInput(tool.input);
+  if (inputStr) {
+    body.appendChild(renderToolSection("Input", inputStr));
+  }
+  if (tool.output) {
+    body.appendChild(renderToolSection("Output", tool.output));
+  }
+  if (!inputStr && !tool.output) {
+    const empty = document.createElement("div");
+    empty.className = "chat-tool-card-empty";
+    empty.textContent = "(no details)";
+    body.appendChild(empty);
+  }
+}
+
+function renderToolSection(label: string, content: string): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "chat-tool-card-section";
+  const lab = document.createElement("div");
+  lab.className = "chat-tool-card-section-label";
+  lab.textContent = label;
+  section.appendChild(lab);
+  const pre = document.createElement("pre");
+  pre.className = "chat-tool-card-section-content";
+  pre.textContent = content;
+  section.appendChild(pre);
+  return section;
+}
+
+function formatToolInput(input: unknown): string {
+  if (input === undefined || input === null) return "";
+  if (typeof input === "string") return input;
+  // Inputs come from the SDK (already JSON-deserialized), so JSON.stringify
+  // can't hit a circular ref. Empty `{}` / `[]` carry no useful detail.
+  const s = JSON.stringify(input, null, 2);
+  if (s === "{}" || s === "[]") return "";
+  return s;
 }
 
 // Tiny dependency-free markdown renderer for profile.md content.

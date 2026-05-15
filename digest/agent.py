@@ -10,9 +10,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -66,6 +67,10 @@ class RunState:
     # Set by options builders; persisted to digest JSON for display in the runs UI.
     curation_system_prompt: str = ""
     reflection_system_prompt: str = ""
+    # Snapshot of profile.md at curation start, baked into the system prompt.
+    # Persisted on the curation run record so reflection can show the agent
+    # exactly which profile produced an item it's reacting to.
+    profile_snapshot: str = ""
     # Accumulated thinking text from the most recent AssistantMessage; consumed by record().
     pending_thinking: str | None = None
     # Reflection-only: the feedback event that triggered this run, if any.
@@ -110,65 +115,11 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
       - submit_digest: writes `state.submitted_items` and `state.agent_notes`.
     No other tool here mutates state. The runner reads these fields after the
     agent stream ends.
+
+    Profile and recent-digest context are baked into the system prompt by
+    `curation_options` rather than fetched via tools, so the agent doesn't
+    burn turns on what it always needs.
     """
-
-    @tool(
-        "read_profile",
-        "Read the user's profile markdown — their standing interests, "
-        "things-explored, dislikes, and voice notes.",
-        {},
-    )
-    async def _read_profile(_args: dict[str, Any]) -> dict[str, Any]:
-        text = state.store.read_profile()
-        # Capture the snapshot on curation runs so a later reflection agent can
-        # see exactly which profile produced an item it's reacting to.
-        state.record(
-            "read_profile",
-            {},
-            f"{len(text)} chars",
-            details={"profile_snapshot": text},
-        )
-        return {"content": [{"type": "text", "text": text}]}
-
-    @tool(
-        "read_recent_feedback",
-        "Read user feedback events from the last N days as JSONL.",
-        {"days": int},
-    )
-    async def _read_recent_feedback(args: dict[str, Any]) -> dict[str, Any]:
-        days = int(args.get("days", 30))
-        events = state.store.read_recent_feedback(days=days)
-        text = "\n".join(json.dumps(e) for e in events) or "(no feedback yet)"
-        state.record(
-            "read_recent_feedback",
-            {"days": days},
-            f"{len(events)} events",
-            details={"events": events},
-        )
-        return {"content": [{"type": "text", "text": text}]}
-
-    @tool(
-        "read_recent_digests",
-        "Read recent digest items as date, item_id, title, source, url (tab-separated). "
-        "Use for deduplication and source provenance.",
-        {"days": int},
-    )
-    async def _read_recent_digests(args: dict[str, Any]) -> dict[str, Any]:
-        days = int(args.get("days", 7))
-        items = state.store.recent_digest_items(days=days)
-        text = (
-            "\n".join(
-                f"{i['date']}\t{i['id']}\t{i['title']}\t{i['source']}\t{i['url']}" for i in items
-            )
-            or "(none)"
-        )
-        state.record(
-            "read_recent_digests",
-            {"days": days},
-            f"{len(items)} items",
-            details={"items": items},
-        )
-        return {"content": [{"type": "text", "text": text}]}
 
     @tool(
         "list_sources",
@@ -360,9 +311,6 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         }
 
     tools = [
-        _read_profile,
-        _read_recent_feedback,
-        _read_recent_digests,
         _list_sources,
         _fetch_rss,
         _fetch_yt_channel,
@@ -631,17 +579,21 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             state.record("read_triggering_curation_run", {"item_id": item_id}, "not found")
             return {"content": [{"type": "text", "text": text}]}
         snapshot: str | None = None
-        for entry in match.get("tool_log") or []:
-            if entry.get("tool") != "read_profile":
-                continue
-            # New schema nests it under details; legacy runs have it flat.
-            details = entry.get("details")
-            if isinstance(details, dict) and isinstance(details.get("profile_snapshot"), str):
-                snapshot = details["profile_snapshot"]
-                break
-            if isinstance(entry.get("profile_snapshot"), str):
-                snapshot = entry["profile_snapshot"]
-                break
+        top_level = match.get("profile_snapshot")
+        if isinstance(top_level, str) and top_level:
+            snapshot = top_level
+        else:
+            for entry in match.get("tool_log") or []:
+                if entry.get("tool") != "read_profile":
+                    continue
+                # New schema nests it under details; legacy runs have it flat.
+                details = entry.get("details")
+                if isinstance(details, dict) and isinstance(details.get("profile_snapshot"), str):
+                    snapshot = details["profile_snapshot"]
+                    break
+                if isinstance(entry.get("profile_snapshot"), str):
+                    snapshot = entry["profile_snapshot"]
+                    break
         compact = _compact_curation_runs([match], max_bytes=40_000)
         if snapshot is None:
             tail = (
@@ -844,8 +796,48 @@ def _system_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text(encoding="utf-8")
 
 
+def _render_recent_digests_with_feedback(state: RunState, *, days: int = 21) -> str:
+    """Render the last `days` of submitted items with their user feedback.
+
+    Pulled directly from digest files so each item's `feedback` field (set by
+    `update_item_feedback` when the user reacts) is included inline. Format
+    matches what the system prompt advertises: date\\tsource\\ttitle\\turl\\tfeedback.
+    """
+    cutoff = state.today - timedelta(days=days)
+    lines: list[str] = []
+    # list_digests() returns dates newest-first, so we can stop at the cutoff.
+    for d in state.store.list_digests():
+        if d < cutoff:
+            break
+        data = state.store.read_digest(d)
+        if not data:
+            continue
+        for item in data.get("items") or []:
+            fb = item.get("feedback") or "—"
+            lines.append(
+                f"{d.isoformat()}\t{item.get('source', '')}\t"
+                f"{item.get('title', '')}\t{item.get('url', '')}\t{fb}"
+            )
+    return "\n".join(lines) or f"(no items surfaced in the last {days} days)"
+
+
+def _fill_template(template: str, values: dict[str, str]) -> str:
+    """Single-pass `{{KEY}}` substitution so values can't bleed into each other.
+
+    Chained `str.replace` would expand a `{{B}}` placeholder embedded in the
+    text inserted for `{{A}}`, which is a real risk when one of the values is
+    user-controlled (profile.md).
+    """
+    pattern = re.compile(r"\{\{(" + "|".join(re.escape(k) for k in values) + r")\}\}")
+    return pattern.sub(lambda m: values[m.group(1)], template)
+
+
 def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOptions:
-    system = _system_prompt("system.md")
+    template = _system_prompt("system.md")
+    profile = state.store.read_profile()
+    state.profile_snapshot = profile
+    recent = _render_recent_digests_with_feedback(state, days=21)
+    system = _fill_template(template, {"PROFILE": profile, "RECENT_DIGESTS": recent})
     state.curation_system_prompt = system
     server = create_sdk_mcp_server(
         name="digest",
@@ -856,9 +848,6 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
         system_prompt=system,
         mcp_servers={"digest": server},
         allowed_tools=[
-            "mcp__digest__read_profile",
-            "mcp__digest__read_recent_feedback",
-            "mcp__digest__read_recent_digests",
             "mcp__digest__list_sources",
             "mcp__digest__fetch_rss",
             "mcp__digest__fetch_youtube_channel",
@@ -997,4 +986,5 @@ def chat_options(
         max_turns=max_turns,
         permission_mode="bypassPermissions",
         include_partial_messages=True,
+        thinking={"type": "adaptive"},
     )
