@@ -82,24 +82,29 @@ def test_feedback_skips_digests_with_no_matching_item(client: TestClient, tmp_da
 def test_feedback_skips_empty_digest_read(
     client: TestClient, tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """If read_digest returns None for one of the dates, the loop must continue."""
-    _seed(tmp_data_dir)
+    """If `read_digest` returns None for one of the dates the loop must continue
+    on to the next digest — this is the `if not digest: continue` branch."""
     store_on_app: Store = client.app.state.store  # type: ignore[attr-defined]
+    store_on_app.ensure_layout()
+    # Two digests: list_digests returns newest first. We make the newest read
+    # return None to drive the `continue`; the older digest has the item.
+    store_on_app.write_digest(date(2026, 4, 29), [], "")  # newest, will read as None
+    store_on_app.write_digest(
+        date(2026, 4, 28),
+        [{"id": "abc", "type": "article", "title": "T", "source": "s", "url": "u", "summary": ""}],
+        "",
+    )
     real_read = store_on_app.read_digest
-    seen: list[date] = []
 
-    def _maybe_none(d: date) -> Any:
-        seen.append(d)
-        # First call returns None to exercise the `continue` branch.
-        if len(seen) == 1:
+    def _none_then_real(d: date) -> Any:
+        # Only the newest date is masked as None; the older digest reads normally.
+        if d == date(2026, 4, 29):
             return None
         return real_read(d)
 
-    monkeypatch.setattr(store_on_app, "read_digest", _maybe_none)
+    monkeypatch.setattr(store_on_app, "read_digest", _none_then_real)
     r = client.post("/api/feedback", json={"item_id": "abc", "value": "up"})
-    # The route iterates list_digests once per digest; with only one digest seeded,
-    # the first read returns None → 404. Add a second digest to ensure recovery.
-    assert r.status_code in (200, 404)
+    assert r.status_code == 200
 
 
 def test_feedback_value_none_clears_existing(client: TestClient, tmp_data_dir: Path):
