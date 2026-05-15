@@ -19,12 +19,14 @@ class WebDocument:
 
 _MAX_BYTES = 2_000_000  # cap page size before handing HTML to readability
 
-# A normal browser UA. NYT (and other paywalled outlets) serve different markup
-# to non-browser clients; using a real UA keeps us out of that bucket.
+# A current browser UA. NYT (and other paywalled outlets) check the UA as
+# part of bot detection — an outdated Chrome version is one of the first
+# signals they flag. Bump this when Chrome ships a few major versions past
+# the value here. (macOS string is frozen at 10_15_7 in real Chrome UAs.)
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
+    "Chrome/149.0.0.0 Safari/537.36"
 )
 
 
