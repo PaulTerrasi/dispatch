@@ -93,4 +93,12 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    # Protocol method stubs — no executable body
+    "^\\s*\\.\\.\\.$",
+    "^\\s*def .*\\) -> .*: \\.\\.\\.$",
+]
+partial_branches = [
+    "pragma: no branch",
+    "if TYPE_CHECKING:",
 ]

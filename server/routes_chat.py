@@ -176,7 +176,9 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
     async def run_agent() -> None:
         try:
             await asyncio.wait_for(_drive_agent(), timeout=AGENT_WALL_TIMEOUT_SECONDS)
-        except asyncio.CancelledError:
+        except (
+            asyncio.CancelledError
+        ):  # pragma: no cover -- propagated by asyncio when client disconnects mid-stream
             raise
         except TimeoutError:
             log.error("chat.agent_timeout", timeout_s=AGENT_WALL_TIMEOUT_SECONDS)

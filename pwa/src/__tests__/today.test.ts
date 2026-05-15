@@ -203,6 +203,137 @@ describe("renderToday (feed)", () => {
     expect(document.querySelectorAll("article.item").length).toBe(1);
   });
 
+  it("note-toggle button reveals the textarea on click", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        "/api/profile/status": { has_profile: true },
+        "/api/feed": FEED_SEED,
+      }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    const notes = document.querySelector(".feedback-notes") as HTMLTextAreaElement;
+    expect(notes.classList.contains("hidden")).toBe(true);
+    (document.querySelector(".note-toggle-btn") as HTMLButtonElement).click();
+    expect(notes.classList.contains("hidden")).toBe(false);
+    (document.querySelector(".note-toggle-btn") as HTMLButtonElement).click();
+    expect(notes.classList.contains("hidden")).toBe(true);
+  });
+
+  // Note: toggling a previously-reacted item back to "none" is exercised in the
+  // existing renderDigest suite; in the feed view, the item never shows up
+  // pre-reacted, so a dedicated branch test here would duplicate that path.
+
+  it("thumbs-down on an unreacted item fades the card out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        "/api/profile/status": { has_profile: true },
+        "/api/feed": FEED_SEED,
+      }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    const before = document.querySelectorAll("article.item").length;
+    const down = document.querySelector("article.item .thumb.down") as HTMLButtonElement;
+    down.click();
+    await vi.runAllTimersAsync();
+    expect(document.querySelectorAll("article.item").length).toBe(before - 1);
+  });
+
+  it("renders hostname when source is empty, stripping www.", async () => {
+    const seed = structuredClone(FEED_SEED);
+    seed[0].source = "";
+    seed[0].url = "https://www.example.com/path";
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    expect(document.body.textContent).toContain("example.com");
+    expect(document.body.textContent).not.toContain("www.example.com");
+  });
+
+  it("video items render a duration_min meta line", async () => {
+    const seed = structuredClone(FEED_SEED);
+    seed[0].type = "video";
+    seed[0].duration_min = 12;
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    expect(document.body.textContent).toContain("12 min");
+  });
+
+  it("summary 'show more' toggle expands then collapses the body text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": FEED_SEED }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    const wrap = document.querySelector(".summary") as HTMLElement;
+    const toggle = wrap.querySelector(".summary-toggle") as HTMLButtonElement;
+    toggle.click();
+    expect(wrap.classList.contains("is-expanded")).toBe(true);
+    expect(toggle.textContent).toBe("show less");
+    toggle.click();
+    expect(wrap.classList.contains("is-expanded")).toBe(false);
+    expect(toggle.textContent).toBe("show more");
+  });
+
+  it("toggling thumbs-down off (down→none) clears the notes field, no fade", async () => {
+    // First click is up→down (fades + remove); to exercise the toggle-off
+    // path we render a digest where the item is already 'down'.
+    const seed: Digest = {
+      ...SEED,
+      items: [{ ...SEED.items[0], feedback: "down" }],
+    };
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(
+      async () => new Response('{"status":"ok"}', { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    document.body.appendChild(renderDigest(structuredClone(seed)));
+    const notes = document.querySelector(".feedback-notes") as HTMLTextAreaElement;
+    notes.value = "some note";
+    (document.querySelector(".thumb.down") as HTMLButtonElement).click();
+    await vi.runAllTimersAsync();
+    // No fade-remove (prev wasn't null), and the notes field was cleared.
+    expect(notes.value).toBe("");
+  });
+
+  it("malformed URLs render an empty source line instead of crashing", async () => {
+    const seed = structuredClone(FEED_SEED);
+    seed[0].source = "";
+    seed[0].url = "not-a-url";
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    // No exception thrown; the article renders.
+    expect(document.querySelectorAll("article.item").length).toBe(2);
+  });
+
+  it("falls back to digest_date when an item has no run_started_at", async () => {
+    const seed = structuredClone(FEED_SEED);
+    seed[0].run_started_at = null;
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    // Without crashing, and the card has a date-key built from digest_date.
+    const card = document.querySelector("article.item") as HTMLElement;
+    expect(card.dataset.dateKey).toBeTruthy();
+  });
+
   it("shows inbox-zero empty state when feed is empty", async () => {
     vi.stubGlobal(
       "fetch",

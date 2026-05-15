@@ -78,8 +78,16 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: Unit tests
-        run: npx vitest run
+      - name: Unit tests with coverage
+        run: npx vitest run --coverage
+
+      - name: Upload PWA coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-coverage
+          path: pwa/coverage/
+          if-no-files-found: ignore
 
       - name: Build
         run: npm run build

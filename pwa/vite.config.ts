@@ -23,5 +23,24 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     exclude: ["**/node_modules/**", "**/e2e/**"],
+    setupFiles: ["src/__tests__/setup.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/**/__tests__/**",
+        // Generated from FastAPI's OpenAPI schema; pure type aliases.
+        "src/api-types.ts",
+      ],
+      // Treat *.ts under src/ as the source-of-record; tests live alongside it.
+      all: true,
+      thresholds: {
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
+      },
+    },
   },
 });

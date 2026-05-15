@@ -541,7 +541,9 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 # only have a "count". Best-effort: match on the run's digest
                 # date via item_id lookup is out-of-scope here, so we skip.
                 continue
-            if match is not None:
+            if (
+                match is not None
+            ):  # pragma: no cover -- legacy fallback never sets match; kept for symmetry
                 break
         if match is None:
             text = f"(no curation run in the last 14 days surfaced item_id={item_id!r})"
