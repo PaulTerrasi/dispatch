@@ -369,12 +369,8 @@ body.chat-page .tabbar {
 .item .summary .summary-text {
   margin: 0;
 }
-.item .summary.is-clamped .summary-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.item .summary .summary-more {
+  margin: 6px 0 0 0;
 }
 .item .summary-toggle {
   margin-top: 6px;

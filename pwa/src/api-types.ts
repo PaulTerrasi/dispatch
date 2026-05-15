@@ -325,6 +325,8 @@ export interface components {
             url: string;
             /** Summary */
             summary: string;
+            /** Summary More */
+            summary_more?: string | null;
             /** Duration Min */
             duration_min?: number | null;
             /** Feedback */
@@ -355,6 +357,8 @@ export interface components {
             url: string;
             /** Summary */
             summary: string;
+            /** Summary More */
+            summary_more?: string | null;
             /** Duration Min */
             duration_min?: number | null;
             /** Feedback */

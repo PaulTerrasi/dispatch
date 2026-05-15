@@ -142,42 +142,42 @@ function renderItem(item: DigestItem, onRemoved?: () => void): HTMLElement {
   card.appendChild(meta);
 
   if (item.summary) {
-    card.appendChild(renderSummary(item.summary));
+    card.appendChild(renderSummary(item.summary, item.summary_more ?? null));
   }
 
   card.appendChild(renderThumbs(item, card, onRemoved));
   return card;
 }
 
-function renderSummary(text: string): HTMLElement {
+function renderSummary(text: string, more: string | null): HTMLElement {
   const wrap = document.createElement("div");
-  wrap.className = "summary is-clamped";
+  wrap.className = "summary";
 
   const p = document.createElement("p");
   p.className = "summary-text";
   p.textContent = text;
   wrap.appendChild(p);
 
+  if (!more) return wrap;
+
+  const cont = document.createElement("p");
+  cont.className = "summary-more";
+  cont.textContent = more;
+  cont.hidden = true;
+  wrap.appendChild(cont);
+
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "summary-toggle";
   toggle.textContent = "show more";
   toggle.setAttribute("aria-expanded", "false");
-  toggle.hidden = true;
   toggle.onclick = () => {
-    const expanded = wrap.classList.toggle("is-expanded");
-    wrap.classList.toggle("is-clamped", !expanded);
-    toggle.textContent = expanded ? "show less" : "show more";
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const willExpand = cont.hidden;
+    cont.hidden = !willExpand;
+    toggle.textContent = willExpand ? "show less" : "show more";
+    toggle.setAttribute("aria-expanded", willExpand ? "true" : "false");
   };
   wrap.appendChild(toggle);
-
-  // Reveal the toggle only when the clamped text actually overflows. We need
-  // to wait for layout, so defer until the element is in the document.
-  /* v8 ignore next 3 -- depends on real CSS layout; jsdom has no layout engine so scrollHeight === clientHeight always, leaving the false branch untestable */
-  requestAnimationFrame(() => {
-    if (p.scrollHeight - p.clientHeight > 1) toggle.hidden = false;
-  });
 
   return wrap;
 }
