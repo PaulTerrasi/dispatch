@@ -325,7 +325,7 @@ def test_talk_emits_profile_changed_event_on_successful_write(
             # Yield a no-op message so the generator drains.
             await asyncio.sleep(0)
             return
-            yield  # pragma: no cover -- makes this an async generator
+            yield  # pragma: no cover -- makes this method an async generator -- makes this an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _PushRunner())
 
@@ -356,7 +356,7 @@ def test_talk_emits_heartbeat_when_agent_is_slow(
             del prompt, options
             await asyncio.sleep(0.1)  # idle long enough for heartbeats to fire
             return
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _SlowRunner())
 
@@ -386,7 +386,7 @@ def test_talk_emits_error_frame_on_agent_timeout(
 
             await asyncio.sleep(2.0)  # exceeds the 0.05s wall time
             return
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _HangRunner())
 
@@ -421,7 +421,7 @@ def test_talk_surfaces_buffered_cli_stderr_on_crash(
             options.stderr("npm error: ENOSPC: no space left on device")
             options.stderr("Error: spawn EACCES")
             raise _SimulatedProcessError("Command failed with exit code 1")
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _CrashAfterStderrRunner())
 
@@ -455,7 +455,7 @@ def test_talk_error_frame_omits_optional_fields_when_unavailable(
     class _PlainCrashRunner:
         async def run(self, prompt, options):
             raise Exception("kaboom")
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _PlainCrashRunner())
 
