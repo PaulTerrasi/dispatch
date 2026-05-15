@@ -94,6 +94,8 @@ export async function renderChat(): Promise<HTMLElement> {
   // ── Profile panel (live read of profile.md) ──────────────────────────────
   const profilePanel = document.createElement("aside");
   profilePanel.className = "chat-profile";
+  profilePanel.id = "chat-profile-panel";
+  profileToggleBtn.setAttribute("aria-controls", "chat-profile-panel");
   const profileHeader = document.createElement("div");
   profileHeader.className = "chat-profile-header";
   const profileLabel = document.createElement("span");
