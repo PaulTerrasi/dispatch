@@ -23,4 +23,9 @@ describe("prettyToolName", () => {
   it("handles mcp tool with camelcase suffix", () => {
     expect(prettyToolName("mcp__server__doThing")).toBe("do thing");
   });
+
+  it("handles mixed camelCase and snake_case", () => {
+    expect(prettyToolName("doThing_extra")).toBe("do thing extra");
+    expect(prettyToolName("mcp__server__doThing_v2")).toBe("do thing v2");
+  });
 });

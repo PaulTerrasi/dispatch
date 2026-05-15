@@ -10,14 +10,12 @@ export function prettyToolName(name: string): string {
     if (parts.length >= 3) s = parts.slice(2).join("__");
   }
 
-  // snake_case → spaced words
-  if (s.includes("_")) {
-    s = s.replace(/_+/g, " ").trim();
-  } else {
-    // CamelCase → spaced words (e.g. "WebFetch" → "Web Fetch")
-    const spaced = s.replace(/([a-z])([A-Z])/g, "$1 $2");
-    if (spaced !== s) s = spaced;
-  }
+  // CamelCase → spaced (e.g. "WebFetch" → "Web Fetch"); applied first so
+  // mixed names like "doThing_extra" still split correctly.
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  // snake_case → spaced
+  s = s.replace(/_+/g, " ").trim();
 
   return s.toLowerCase();
 }
