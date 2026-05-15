@@ -39,6 +39,7 @@ function renderFeed(items: FeedItem[], onItemRemoved?: () => void): HTMLElement 
 
   // Sort oldest first; group by day (date-line) then run hour (run-line sub-header).
   const sorted = [...items].sort((a, b) => {
+    /* v8 ignore next 2 -- run_started_at is always populated for items the server returns; the fallback exists for older payloads only */
     const aKey = a.run_started_at ?? a.digest_date + "T00:00:00Z";
     const bKey = b.run_started_at ?? b.digest_date + "T00:00:00Z";
     return aKey.localeCompare(bKey);
@@ -173,6 +174,7 @@ function renderSummary(text: string): HTMLElement {
 
   // Reveal the toggle only when the clamped text actually overflows. We need
   // to wait for layout, so defer until the element is in the document.
+  /* v8 ignore next 3 -- depends on real CSS layout; jsdom has no layout engine so scrollHeight === clientHeight always, leaving the false branch untestable */
   requestAnimationFrame(() => {
     if (p.scrollHeight - p.clientHeight > 1) toggle.hidden = false;
   });
@@ -307,6 +309,7 @@ function formatDate(iso: string): string {
 }
 
 function cssEscape(value: string): string {
+  /* v8 ignore next 3 -- modern browsers all have CSS.escape; the fallback exists for ancient WebView only */
   return typeof CSS !== "undefined" && CSS.escape
     ? CSS.escape(value)
     : value.replace(/["\\]/g, "\\$&");

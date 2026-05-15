@@ -103,7 +103,7 @@ def apply_unified_diff(original: str, diff: str) -> str:
                         f"expected {content!r}, got {actual!r}"
                     )
                 cursor += 1
-            elif tag == "+":
+            elif tag == "+":  # pragma: no branch -- parser guarantees tag is one of " ", "-", "+"
                 out.append(content)
     out.extend(src_lines[cursor:])
     trailing_nl = original.endswith("\n")

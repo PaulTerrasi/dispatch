@@ -97,12 +97,18 @@ function renderTimeline(run: RunDetail): HTMLElement {
       );
     if (run.exit_reason === "error" && run.error) wrap.appendChild(renderNote("Error", run.error));
     if (run.system_prompt || run.user_prompt)
-      wrap.appendChild(renderPromptBlock(run.system_prompt ?? "", run.user_prompt ?? ""));
+      wrap.appendChild(
+        /* v8 ignore next -- nullish-coalescing fallback for older API payloads; current schema always returns strings */
+        renderPromptBlock(run.system_prompt ?? "", run.user_prompt ?? ""),
+      );
     for (const entry of run.tool_log) wrap.appendChild(renderEvent(entry));
     if (run.reflection_notes) wrap.appendChild(renderNote("Reflection", run.reflection_notes));
   } else {
     if (run.system_prompt || run.user_prompt)
-      wrap.appendChild(renderPromptBlock(run.system_prompt ?? "", run.user_prompt ?? ""));
+      wrap.appendChild(
+        /* v8 ignore next -- nullish-coalescing fallback for older API payloads; current schema always returns strings */
+        renderPromptBlock(run.system_prompt ?? "", run.user_prompt ?? ""),
+      );
     for (const entry of run.tool_log) wrap.appendChild(renderEvent(entry));
     if (run.agent_notes) wrap.appendChild(renderNote("Agent", run.agent_notes));
   }

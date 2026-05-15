@@ -442,3 +442,256 @@ def test_runs_legacy_embedded_in_digest_still_visible(client: TestClient, tmp_da
     assert "legacy01" in ids
     legacy = next(row for row in r.json() if row["run_id"] == "legacy01")
     assert legacy["kind"] == "curation"
+
+
+def test_get_run_returns_detail_for_known_run_id(client: TestClient, tmp_data_dir: Path):
+    """GET /runs/{run_id} returns the full record (incl. tool_log) for a stored run."""
+    _seed_digest(tmp_data_dir)
+    r = client.get("/api/runs/cur00001")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] == "cur00001"
+    assert body["kind"] == "curation"
+    assert body["system_prompt"]
+    assert isinstance(body["tool_log"], list)
+
+
+def test_get_run_404_for_unknown(client: TestClient):
+    r = client.get("/api/runs/does-not-exist")
+    assert r.status_code == 404
+
+
+def test_get_run_falls_back_to_legacy_embedded_run(client: TestClient, tmp_data_dir: Path):
+    """A run_id that lives only inside a legacy digest['runs'] (no /runs/ entry)
+    must still be retrievable via /api/runs/{run_id}."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data["runs"] = [
+        {
+            "run_id": "legacy42",
+            "started_at": "2026-04-29T05:00:00+00:00",
+            "duration_seconds": 99,
+            "tool_calls": 7,
+            "tool_log": [
+                {
+                    "ts": "2026-04-29T05:00:01+00:00",
+                    "tool": "read_profile",
+                    "args": {},
+                    "outcome": "ok",
+                },
+                "garbage-entry-not-a-dict",  # exercises the malformed tool_log branch
+            ],
+            "profile_patches": 0,
+            "sources_changed": 0,
+            "reflection_notes": "ok",
+            "curation_system_prompt": "you are X",
+            "curation_user_prompt": "do Y",
+        }
+    ]
+    # Add an item without a run_id to take the `else len(digest_items)` path.
+    data["items"].append(
+        {
+            "id": "stray",
+            "type": "article",
+            "title": "Stray",
+            "source": "s",
+            "url": "u",
+            "summary": "",
+            # NB: missing run_id → forces the counts-empty branch
+        }
+    )
+    # And one truly-malformed item (missing required fields) to exercise
+    # the DigestItem TypeError-handler.
+    data["items"].append({"id": "broken"})
+    store.rewrite_digest(date(2026, 4, 29), data)
+
+    r = client.get("/api/runs/legacy42")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] == "legacy42"
+    assert body["kind"] == "curation"
+    assert body["agent_notes"]  # carried over from the digest
+    # Malformed tool-log entry was logged & skipped; the good one remains.
+    assert len(body["tool_log"]) == 1
+
+
+def test_get_run_falls_back_to_legacy_singular_run_key(client: TestClient, tmp_data_dir: Path):
+    """Even older digests stored a single `run` dict instead of a `runs` list.
+    `_runs_from_digest` must handle both."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data.pop("runs", None)
+    data["run"] = {
+        "run_id": "veryold",
+        "started_at": "2026-04-29T05:00:00+00:00",
+        "duration_seconds": 42,
+    }
+    store.rewrite_digest(date(2026, 4, 29), data)
+
+    r = client.get("/api/runs/veryold")
+    assert r.status_code == 200
+    assert r.json()["run_id"] == "veryold"
+
+    # _all_runs also surfaces it.
+    r2 = client.get("/api/runs")
+    assert any(row["run_id"] == "veryold" for row in r2.json())
+
+
+def test_get_by_date_rejects_bad_date(client: TestClient):
+    r = client.get("/api/digest/not-a-date")
+    assert r.status_code == 400
+
+
+def test_today_returns_none_when_digest_file_unreadable(client: TestClient, tmp_data_dir: Path):
+    """If list_digests reports a date but read_digest returns None (e.g. the
+    file was truncated mid-write), `/digest/today` answers null instead of crashing."""
+    today_date = date(2026, 5, 14)
+    store = Store(tmp_data_dir)
+    store.ensure_layout()
+    # Plant a digest file that list_digests will see, then overwrite it with
+    # invalid JSON via direct file write — read_digest will crash on bad JSON,
+    # so instead we make read_digest return None by stubbing the store on the app.
+    store.write_digest(today_date, [], "")
+    # Use the underlying Store on app.state.
+    real_read = client.app.state.store.read_digest  # type: ignore[attr-defined]
+    client.app.state.store.read_digest = lambda _d: None  # type: ignore[assignment]
+    try:
+        r = client.get("/api/digest/today")
+        assert r.status_code == 200
+        assert r.json() is None
+    finally:
+        client.app.state.store.read_digest = real_read  # type: ignore[assignment]
+
+
+def test_runs_handles_digest_items_without_run_id(client: TestClient, tmp_data_dir: Path):
+    """In `_all_runs`, when iterating legacy digests, items missing run_id
+    must not crash the per-run counts tracking."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    # Add an item without run_id.
+    data["items"].append(
+        {
+            "id": "no_rid",
+            "type": "article",
+            "title": "Stray",
+            "source": "s",
+            "url": "u",
+            "summary": "",
+        }
+    )
+    store.rewrite_digest(date(2026, 4, 29), data)
+    r = client.get("/api/runs")
+    assert r.status_code == 200
+
+
+def test_get_run_legacy_match_search_iterates_multiple_digests(
+    client: TestClient, tmp_data_dir: Path
+):
+    """When the target run_id lives in the SECOND digest, the iterator must
+    skip past the first (non-matching) digest cleanly."""
+    store = _seed_digest(tmp_data_dir)
+    # The seeded digest at 2026-04-29 has no legacy `runs` key.
+    # Add a SECOND digest WITH a legacy run.
+    store.write_digest(
+        date(2026, 4, 28),
+        [{"id": "z", "type": "article", "title": "Z", "source": "s", "url": "u", "summary": ""}],
+        "",
+    )
+    data = store.read_digest(date(2026, 4, 28)) or {}
+    data["runs"] = [
+        {
+            "run_id": "wrong_id_1",
+            "started_at": "2026-04-28T05:00:00+00:00",
+            "duration_seconds": 1,
+        },
+        {
+            "run_id": "wanted",
+            "started_at": "2026-04-28T06:00:00+00:00",
+            "duration_seconds": 2,
+        },
+    ]
+    store.rewrite_digest(date(2026, 4, 28), data)
+
+    r = client.get("/api/runs/wanted")
+    assert r.status_code == 200
+    assert r.json()["run_id"] == "wanted"
+
+
+def test_runs_handles_record_without_run_id(client: TestClient, tmp_data_dir: Path):
+    """A persisted run record missing `run_id` (e.g. old schema) should still
+    surface in /api/runs without crashing — it just can't be deduped against
+    legacy embedded runs."""
+    store = _seed_digest(tmp_data_dir)
+    today = date(2026, 4, 29).isoformat()
+    store.append_run(
+        {
+            # no run_id
+            "kind": "curation",
+            "started_at": f"{today}T08:00:00+00:00",
+            "duration_seconds": 5,
+        }
+    )
+    r = client.get("/api/runs")
+    assert r.status_code == 200
+    # The result list survives the missing run_id.
+    assert any(row["run_id"] is None for row in r.json())
+
+
+def test_runs_handles_legacy_run_with_no_run_id(client: TestClient, tmp_data_dir: Path):
+    """Legacy embedded runs missing run_id must not crash the seen-set tracking."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data["runs"] = [
+        {
+            # no run_id
+            "started_at": "2026-04-29T04:00:00+00:00",
+            "duration_seconds": 9,
+        }
+    ]
+    store.rewrite_digest(date(2026, 4, 29), data)
+    r = client.get("/api/runs")
+    assert r.status_code == 200
+
+
+def test_run_date_uses_fallback_when_started_at_is_short(client: TestClient, tmp_data_dir: Path):
+    """`_run_date` falls back to the digest date when `started_at` is a string
+    too short to slice an ISO date out of (length < 10)."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data["runs"] = [
+        {
+            "run_id": "short_ts",
+            "started_at": "short",  # < 10 chars → falls back to digest date
+            "duration_seconds": 1,
+        }
+    ]
+    store.rewrite_digest(date(2026, 4, 29), data)
+    r = client.get("/api/runs")
+    short = next((row for row in r.json() if row["run_id"] == "short_ts"), None)
+    assert short is not None
+    # Fallback returns the digest date.
+    assert short["date"] == "2026-04-29"
+
+
+def test_runs_excludes_duplicate_when_present_in_both_stores(
+    client: TestClient, tmp_data_dir: Path
+):
+    """Same run_id in both new-style runs/ and legacy digest['runs'] is dedup'd
+    in favor of the new-store record."""
+    store = _seed_digest(tmp_data_dir)
+    # cur00001 already exists in runs/. Now embed it in digest['runs'] too.
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data["runs"] = [
+        {
+            "run_id": "cur00001",
+            "started_at": "2026-04-29T04:00:00+00:00",
+            "duration_seconds": 1,
+            "reflection_notes": "legacy_should_not_win",
+        }
+    ]
+    store.rewrite_digest(date(2026, 4, 29), data)
+    r = client.get("/api/runs")
+    rows = [row for row in r.json() if row["run_id"] == "cur00001"]
+    assert len(rows) == 1
+    # The new-store record (no `legacy_should_not_win` reflection_notes) wins.
+    assert "legacy_should_not_win" not in rows[0].get("reflection_notes", "")

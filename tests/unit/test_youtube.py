@@ -23,6 +23,56 @@ def test_channel_rss_url_format():
 
 
 @pytest.mark.asyncio
+async def test_fetch_youtube_transcript_offloads_to_thread(monkeypatch):
+    """fetch_youtube_transcript wraps a sync API; verify it returns the joined
+    text + language and dispatches the sync call through asyncio.to_thread.
+    """
+    from digest.tools import youtube as yt_module
+
+    class _Snippet:
+        def __init__(self, text: str, language: str) -> None:
+            self.text = text
+            self.language = language
+
+    class _Fetched:
+        def __iter__(self):
+            return iter([_Snippet("hello", "en"), _Snippet("world", "en")])
+
+    class _FakeApi:
+        def fetch(self, video_id: str) -> _Fetched:
+            assert video_id == "vid01234567"
+            return _Fetched()
+
+    class _FakeModule:
+        YouTubeTranscriptApi = _FakeApi
+
+    monkeypatch.setitem(__import__("sys").modules, "youtube_transcript_api", _FakeModule)
+
+    result = await yt_module.fetch_youtube_transcript("vid01234567")
+    assert result.video_id == "vid01234567"
+    assert result.text == "hello\nworld"
+    assert result.language == "en"
+
+
+@pytest.mark.asyncio
+async def test_fetch_youtube_transcript_empty(monkeypatch):
+    """Empty transcript → empty text + None language."""
+    from digest.tools import youtube as yt_module
+
+    class _FakeApi:
+        def fetch(self, _video_id: str):
+            return iter([])
+
+    class _FakeModule:
+        YouTubeTranscriptApi = _FakeApi
+
+    monkeypatch.setitem(__import__("sys").modules, "youtube_transcript_api", _FakeModule)
+    result = await yt_module.fetch_youtube_transcript("v")
+    assert result.text == ""
+    assert result.language is None
+
+
+@pytest.mark.asyncio
 async def test_fetch_youtube_channel_parses_uploads():
     def handler(request: httpx.Request) -> httpx.Response:
         assert "channel_id=UCabc" in str(request.url)

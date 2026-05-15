@@ -533,16 +533,10 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             if isinstance(ids, list) and item_id in ids:
                 match = r
                 break
-            # Legacy fallback: scan tool_log for a submit_digest that included this id.
-            for entry in r.get("tool_log") or []:
-                if entry.get("tool") != "submit_digest":
-                    continue
-                # We don't store item ids inside the recorded args; legacy runs
-                # only have a "count". Best-effort: match on the run's digest
-                # date via item_id lookup is out-of-scope here, so we skip.
-                continue
-            if match is not None:
-                break
+            # Legacy runs (before submitted_item_ids was added) can't be
+            # matched: the recorded args carry only a "count", not the item
+            # ids, and we don't have a digest-date → item-id reverse index
+            # here. Skip them and fall through to the not-found path.
         if match is None:
             text = f"(no curation run in the last 14 days surfaced item_id={item_id!r})"
             state.record("read_triggering_curation_run", {"item_id": item_id}, "not found")

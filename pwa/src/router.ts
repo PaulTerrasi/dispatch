@@ -29,6 +29,10 @@ export function startRouter(routes: Route[], mountEl: HTMLElement): void {
       if (m) {
         const params: Record<string, string> = {};
         r.regex.keys.forEach((k, i) => {
+          // The `?? ""` guard is belt-and-suspenders: matched groups are
+          // non-greedy `[^/]+`, so a capture group cannot be undefined when
+          // the parent match succeeds.
+          /* v8 ignore next */
           params[k] = decodeURIComponent(m[i + 1] ?? "");
         });
         const loader = document.createElement("div");

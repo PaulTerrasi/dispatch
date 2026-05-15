@@ -24,9 +24,11 @@ if ("serviceWorker" in navigator) {
       location.reload();
     });
   });
+  /* v8 ignore start -- browsers without ServiceWorker; jsdom always reports it as present so untestable */
 } else {
   window.addEventListener("load", () => initPullToRefresh(null));
 }
+/* v8 ignore stop */
 
 const mount = document.getElementById("app");
 if (!mount) throw new Error("missing #app element");

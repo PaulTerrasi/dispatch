@@ -99,6 +99,30 @@ def test_write_sources_empty(store: Store):
     assert store.list_sources() == []
 
 
+def test_write_sources_youtube_without_name_or_tags(store: Store):
+    """A YouTube source with no `name`/`tags` should serialize a bare channel_id entry."""
+    store.write_sources([Source(kind="youtube", value="UCminimal")])
+    text = store.sources_path.read_text(encoding="utf-8")
+    assert "channel_id: UCminimal" in text
+    assert "name:" not in text
+    # Round-trips back losslessly.
+    yt = next(s for s in store.list_sources() if s.kind == "youtube")
+    assert yt.name is None
+    assert yt.tags == []
+
+
+def test_write_sources_ignores_unknown_kind(store: Store):
+    """An unknown source kind is dropped without raising — the YAML stays sane."""
+    store.write_sources(
+        [
+            Source(kind="rss", value="https://ok.example/feed"),
+            Source(kind="podcast", value="https://podcasts.example/feed"),  # bogus
+        ]
+    )
+    kinds = {s.kind for s in store.list_sources()}
+    assert kinds == {"rss"}
+
+
 def test_write_sources_preserves_header(store: Store):
     store.write_sources([])
     text = store.sources_path.read_text(encoding="utf-8")
@@ -239,3 +263,214 @@ def test_reflection_memory_default_when_missing(tmp_data_dir):
     store = Store(tmp_data_dir)
     text = store.read_reflection_memory()
     assert "No notes yet" in text
+
+
+# ── small-branch coverage ──────────────────────────────────────────────────
+
+
+def test_list_sources_when_file_missing(tmp_data_dir):
+    """If sources.yaml doesn't exist, list_sources returns an empty list."""
+    s = Store(tmp_data_dir)
+    assert s.list_sources() == []
+
+
+def test_list_sources_skips_blank_site_entries(store: Store):
+    """A `sites:` entry given as an object without `url`, or with falsy url, is ignored."""
+    store.sources_path.write_text(
+        "rss: []\nyoutube: []\nsites:\n"
+        "  - url: https://example.com\n"
+        "  - url: \n"  # falsy
+        "  - {}\n",  # dict missing url
+        encoding="utf-8",
+    )
+    sites = [s for s in store.list_sources() if s.kind == "site"]
+    assert [s.value for s in sites] == ["https://example.com"]
+
+
+def test_write_digest_merges_with_existing_dedupes_by_id(store: Store):
+    """Second call must add new items, leave existing ids alone, and update agent_notes."""
+    d = date(2026, 4, 29)
+    store.write_digest(d, [{"id": "a", "title": "A", "url": "u"}], "first")
+    store.write_digest(
+        d,
+        [
+            {"id": "a", "title": "A-dup", "url": "u"},  # duplicate id — ignored
+            {"id": "b", "title": "B", "url": "v"},
+        ],
+        "second",
+    )
+    data = store.read_digest(d)
+    assert data is not None
+    assert sorted(i["id"] for i in data["items"]) == ["a", "b"]
+    # First-write title for "a" wins (we don't overwrite).
+    a = next(i for i in data["items"] if i["id"] == "a")
+    assert a["title"] == "A"
+    assert data["agent_notes"] == "second"
+
+
+def test_list_digests_missing_dir_returns_empty(tmp_data_dir):
+    s = Store(tmp_data_dir)
+    # ensure_layout NOT called — digests/ does not exist.
+    assert s.list_digests() == []
+
+
+def test_list_digests_ignores_non_date_filenames(store: Store):
+    """Stray junk like `latest.json` shouldn't crash the lister."""
+    (store.digests_dir / "not-a-date.json").write_text("{}", encoding="utf-8")
+    (store.digests_dir / "2026-04-29.json").write_text("{}", encoding="utf-8")
+    assert store.list_digests() == [date(2026, 4, 29)]
+
+
+def test_recent_digest_items_skips_empty_digest_file(store: Store):
+    """A digest with empty body or no `items` key shouldn't break recent_digest_items."""
+    d = datetime.now(UTC).date()
+    store.digest_path(d).write_text("{}", encoding="utf-8")  # no items
+    assert store.recent_digest_items(days=1) == []
+
+
+def test_update_item_feedback_missing_digest_returns_false(store: Store):
+    assert store.update_item_feedback(date(2026, 1, 1), "any", "up") is False
+
+
+def test_read_recent_feedback_dir_missing(tmp_data_dir):
+    s = Store(tmp_data_dir)
+    assert s.read_recent_feedback(days=1) == []
+
+
+def test_read_recent_feedback_skips_bad_filenames_and_old_files(store: Store):
+    """Filenames that don't parse as dates and files outside the window are skipped."""
+    today = datetime.now(UTC).date()
+    old = today - timedelta(days=60)
+    (store.feedback_dir / "garbage.jsonl").write_text("{}\n", encoding="utf-8")
+    (store.feedback_dir / f"{old.isoformat()}.jsonl").write_text(
+        '{"kind":"thumb","ts":"2020-01-01T00:00:00+00:00"}\n', encoding="utf-8"
+    )
+    (store.feedback_dir / f"{today.isoformat()}.jsonl").write_text(
+        '{"kind":"chat","text":"x"}\n', encoding="utf-8"
+    )
+    out = store.read_recent_feedback(days=14)
+    assert {e["kind"] for e in out} == {"chat"}
+
+
+def test_read_recent_feedback_skips_blank_and_invalid_json_lines(store: Store):
+    today = datetime.now(UTC).date()
+    (store.feedback_dir / f"{today.isoformat()}.jsonl").write_text(
+        '{"kind":"thumb"}\n\n{not-json}\n{"kind":"chat","text":"hi"}\n',
+        encoding="utf-8",
+    )
+    out = store.read_recent_feedback(days=1)
+    assert sorted(e["kind"] for e in out) == ["chat", "thumb"]
+
+
+def test_read_recent_runs_dir_missing(tmp_data_dir):
+    s = Store(tmp_data_dir)
+    assert s.read_recent_runs(days=1) == []
+
+
+def test_read_recent_runs_skips_bad_filenames_blanks_and_bad_json(store: Store):
+    today = datetime.now(UTC).date()
+    (store.runs_dir / "garbage.jsonl").write_text("{}\n", encoding="utf-8")
+    (store.runs_dir / f"{today.isoformat()}.jsonl").write_text(
+        '{"run_id":"a","started_at":"2026-05-14T10:00:00+00:00"}\n\n'
+        "not json\n"
+        '{"run_id":"b","started_at":"2026-05-14T11:00:00+00:00"}\n',
+        encoding="utf-8",
+    )
+    out = store.read_recent_runs(days=1)
+    assert [r["run_id"] for r in out] == ["b", "a"]
+
+
+def test_read_recent_runs_filters_by_window(store: Store):
+    today = datetime.now(UTC).date()
+    (store.runs_dir / "2020-01-01.jsonl").write_text(
+        '{"run_id":"old","started_at":"2020-01-01T10:00:00+00:00"}\n', encoding="utf-8"
+    )
+    (store.runs_dir / f"{today.isoformat()}.jsonl").write_text(
+        '{"run_id":"new","started_at":"' + today.isoformat() + 'T10:00:00+00:00"}\n',
+        encoding="utf-8",
+    )
+    out = store.read_recent_runs(days=7)
+    assert [r["run_id"] for r in out] == ["new"]
+
+
+def test_read_run_missing_dir_returns_none(tmp_data_dir):
+    s = Store(tmp_data_dir)
+    assert s.read_run("anything") is None
+
+
+def test_read_run_skips_blank_and_invalid_json_lines(store: Store):
+    today = datetime.now(UTC).date()
+    (store.runs_dir / f"{today.isoformat()}.jsonl").write_text(
+        '\nnot json\n{"run_id":"hit","kind":"curation"}\n', encoding="utf-8"
+    )
+    assert store.read_run("hit") == {"run_id": "hit", "kind": "curation"}
+    assert store.read_run("miss") is None
+
+
+def test_reflection_cursor_corrupt_json_returns_none(store: Store):
+    store._cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    store._cursor_path.write_text("garbage", encoding="utf-8")
+    assert store.read_reflection_cursor() is None
+
+
+def test_reflection_cursor_non_string_value_returns_none(store: Store):
+    import json
+
+    store._cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    store._cursor_path.write_text(json.dumps({"last_processed_ts": 12345}), encoding="utf-8")
+    assert store.read_reflection_cursor() is None
+
+
+def test_reflection_lock_unreadable_stale_lock_not_stolen(store: Store):
+    """A lock file with no expires_at is treated as 'don't know if stale' → don't steal."""
+    store.state_dir.mkdir(parents=True, exist_ok=True)
+    store._lock_path.write_text("garbage", encoding="utf-8")
+    assert store.try_acquire_reflection_lock(ttl_seconds=900) is None
+
+
+def test_release_reflection_lock_when_lock_file_absent(store: Store):
+    """Releasing with no lock file is a no-op."""
+    store.state_dir.mkdir(parents=True, exist_ok=True)
+    store.release_reflection_lock("nope")  # must not raise
+
+
+def test_release_reflection_lock_unreadable_lock_is_noop(store: Store):
+    store.state_dir.mkdir(parents=True, exist_ok=True)
+    store._lock_path.write_text("garbage", encoding="utf-8")
+    store.release_reflection_lock("any-token")  # must not raise
+    assert store._lock_path.exists()  # left alone
+
+
+def test_git_init_if_needed_short_circuits_when_already_initialized(tmp_data_dir):
+    """If .git already exists we don't reinitialize — the local config is kept."""
+    s = Store(tmp_data_dir)
+    s.git_init_if_needed()
+    (tmp_data_dir / "marker").write_text("hi", encoding="utf-8")
+    # Second call must not error and must not blow away our marker.
+    s.git_init_if_needed()
+    assert (tmp_data_dir / "marker").exists()
+
+
+def test_release_reflection_lock_tolerates_file_disappearing(store: Store, monkeypatch):
+    """Race: another process unlinks the lock between our exists() check and unlink()."""
+    token = store.try_acquire_reflection_lock(ttl_seconds=900)
+    assert token is not None
+
+    real_unlink = type(store._lock_path).unlink
+
+    def _vanishing(self):
+        # Honest race: delete the file first, then re-raise the FileNotFoundError
+        # the way a real concurrent unlink would.
+        real_unlink(self)
+        raise FileNotFoundError(str(self))
+
+    monkeypatch.setattr(type(store._lock_path), "unlink", _vanishing)
+    # Must not raise.
+    store.release_reflection_lock(token)
+
+
+def test_git_commit_all_skipped_when_not_a_repo(tmp_data_dir):
+    """git_commit_all returns False when the data dir hasn't been git-init'd."""
+    s = Store(tmp_data_dir)
+    s.ensure_layout()
+    assert s.git_commit_all("msg") is False
