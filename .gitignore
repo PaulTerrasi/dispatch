@@ -35,3 +35,4 @@ infra/cdk.context.json
 # Local data store (separate repo)
 /data/
 pwa/coverage/
+coverage.xml
