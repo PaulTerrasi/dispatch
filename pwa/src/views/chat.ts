@@ -1,4 +1,5 @@
 import { api, type ChatStreamHandlers } from "../api";
+import { prettyToolName } from "../tool-names";
 
 type MsgItem = { kind: "msg"; role: "user" | "assistant"; text: string };
 type ToolItem = {
@@ -370,7 +371,7 @@ function prettyToolStart(name: string, _input: unknown): string {
     case "end_reflection":
       return "✓ wrapping up";
     default:
-      return `· ${name}`;
+      return `· ${prettyToolName(name)}`;
   }
 }
 
