@@ -92,6 +92,10 @@ def _tool_result_text(content: Any) -> str:
     if isinstance(content, str):
         text = content
     elif isinstance(content, list):
+        # List-shaped tool results are sequences of typed content blocks.
+        # We only surface text blocks here — non-dict entries and dicts
+        # without a string "text" field (e.g. image content) are dropped,
+        # since the chat UI has no way to display them inline.
         parts: list[str] = []
         for item in content:
             if isinstance(item, dict):
