@@ -650,6 +650,10 @@ html:has(body.chat-page) {
 body.chat-page {
   overflow: hidden;
   height: var(--viewport-h, 100dvh);
+  /* The base `body { min-height: 100vh }` rule would otherwise win when the
+     keyboard shrinks `--viewport-h` below `100vh`, leaving body taller than
+     the visible viewport and creating a ghost gap below the input bar. */
+  min-height: 0;
   /* Body's normal `padding-top: env(safe-area-inset-top)` would shrink the
      content box on notched phones while `main` is still sized to the full
      `--viewport-h`, clipping the input bar off the bottom. The chat toolbar
