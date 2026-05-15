@@ -62,6 +62,10 @@ body {
   background: var(--paper);
   color: var(--ink);
   min-height: 100vh;
+  /* Stop the iOS rubber-band on the root from dragging the layout while the
+     on-screen keyboard is animating in. Per-element scroll containers still
+     bounce normally. */
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -635,13 +639,35 @@ body.chat-page .tabbar {
 }
 
 /* Chat-page full-viewport layout (resizable split) */
+html:has(body.chat-page) {
+  /* Pin the root on chat-page only so iOS Safari can't auto-scroll the
+     document to bring a focused input into view when the keyboard opens —
+     that's what makes the "static" header appear to slide up. Other pages
+     still scroll normally (and pull-to-refresh on /today keeps working). */
+  overflow: hidden;
+  height: 100%;
+}
 body.chat-page {
   overflow: hidden;
+  height: var(--viewport-h, 100dvh);
+  /* The base `body { min-height: 100vh }` rule would otherwise win when the
+     keyboard shrinks `--viewport-h` below `100vh`, leaving body taller than
+     the visible viewport and creating a ghost gap below the input bar. */
+  min-height: 0;
+  /* Body's normal `padding-top: env(safe-area-inset-top)` would shrink the
+     content box on notched phones while `main` is still sized to the full
+     `--viewport-h`, clipping the input bar off the bottom. The chat toolbar
+     applies its own safe-area-inset-top, so zero the body's contribution. */
+  padding-top: 0;
 }
 body.chat-page main {
   max-width: none;
   padding: 0;
-  height: 100dvh;
+  /* `--viewport-h` is kept in sync with VisualViewport.height (see main.ts),
+     so the chat layout shrinks when the on-screen keyboard appears and the
+     input bar stays anchored just above it. Falls back to 100dvh on browsers
+     that don't run the JS or don't expose VisualViewport. */
+  height: var(--viewport-h, 100dvh);
   display: flex;
   flex-direction: column;
 }
