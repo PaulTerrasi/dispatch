@@ -305,9 +305,170 @@ function renderEvent(entry: ToolCallEntry): HTMLElement {
     body.appendChild(outcome);
   }
 
+  const detailsEl = renderDetails(entry);
+  if (detailsEl) body.appendChild(detailsEl);
+
   row.appendChild(body);
   wrap.appendChild(row);
   return wrap;
+}
+
+function renderDetails(entry: ToolCallEntry): HTMLElement | null {
+  const details = entry.details;
+  if (!details) return null;
+  const sections: HTMLElement[] = [];
+  for (const [key, value] of Object.entries(details)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "string" && value === "") continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    sections.push(renderDetailSection(entry.tool, key, value));
+  }
+  if (!sections.length) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "run-event-details";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "run-event-details-toggle";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.textContent = "Show details";
+
+  const body = document.createElement("div");
+  body.className = "run-event-details-body collapsed";
+  for (const s of sections) body.appendChild(s);
+
+  toggle.onclick = () => {
+    const collapsed = body.classList.toggle("collapsed");
+    toggle.textContent = collapsed ? "Show details" : "Hide details";
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  };
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderDetailSection(tool: string, key: string, value: unknown): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "run-event-detail-section";
+
+  const label = document.createElement("div");
+  label.className = "run-event-detail-label";
+  label.textContent = detailLabel(tool, key);
+  section.appendChild(label);
+
+  section.appendChild(renderDetailValue(value));
+  return section;
+}
+
+function detailLabel(_tool: string, key: string): string {
+  const map: Record<string, string> = {
+    profile: "profile.md",
+    profile_snapshot: "profile.md (snapshot)",
+    entries: "Entries",
+    items: "Items",
+    sources: "Sources",
+    events: "Feedback events",
+    prior_events: "Prior feedback events",
+    triggering_event: "Triggering event",
+    text: "Text",
+    diff: "Diff",
+    before: "Before",
+    after: "After",
+    error: "Error",
+    agent_notes: "Agent notes",
+    notes: "Notes",
+    run_ids: "Run IDs",
+    matched_run_id: "Matched run",
+    title: "Title",
+    url: "URL",
+    kind: "Kind",
+    value: "Value",
+    name: "Name",
+    tags: "Tags",
+    rejected: "Rejected",
+  };
+  return map[key] ?? key;
+}
+
+function renderDetailValue(value: unknown): HTMLElement {
+  if (typeof value === "string") {
+    const pre = document.createElement("pre");
+    pre.className = "run-event-detail-pre";
+    pre.textContent = value;
+    return pre;
+  }
+  if (Array.isArray(value)) {
+    if (value.every((v) => v && typeof v === "object" && !Array.isArray(v))) {
+      return renderObjectList(value as Record<string, unknown>[]);
+    }
+    const pre = document.createElement("pre");
+    pre.className = "run-event-detail-pre";
+    pre.textContent = JSON.stringify(value, null, 2);
+    return pre;
+  }
+  if (value && typeof value === "object") {
+    const pre = document.createElement("pre");
+    pre.className = "run-event-detail-pre";
+    pre.textContent = JSON.stringify(value, null, 2);
+    return pre;
+  }
+  const span = document.createElement("div");
+  span.className = "run-event-detail-pre";
+  span.textContent = String(value);
+  return span;
+}
+
+function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
+  const list = document.createElement("ol");
+  list.className = "run-event-detail-list";
+  for (const row of rows) {
+    const li = document.createElement("li");
+    const title = pickString(row, "title") ?? pickString(row, "name") ?? pickString(row, "value");
+    const url = pickString(row, "url") ?? pickString(row, "link");
+    const sub =
+      pickString(row, "source") ??
+      pickString(row, "kind") ??
+      pickString(row, "type") ??
+      pickString(row, "published_at") ??
+      pickString(row, "ts");
+
+    if (title) {
+      const t = document.createElement("div");
+      t.className = "run-event-detail-row-title";
+      if (url) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = title;
+        t.appendChild(a);
+      } else {
+        t.textContent = title;
+      }
+      li.appendChild(t);
+    }
+    if (sub) {
+      const s = document.createElement("div");
+      s.className = "run-event-detail-row-sub";
+      s.textContent = sub;
+      li.appendChild(s);
+    }
+    if (!title && !sub) {
+      const pre = document.createElement("pre");
+      pre.className = "run-event-detail-pre";
+      pre.textContent = JSON.stringify(row, null, 2);
+      li.appendChild(pre);
+    }
+    list.appendChild(li);
+  }
+  return list;
+}
+
+function pickString(obj: Record<string, unknown>, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === "string" && v ? v : undefined;
 }
 
 function renderNote(label: string, text: string): HTMLElement {

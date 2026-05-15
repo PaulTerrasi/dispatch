@@ -77,20 +77,20 @@ class RunState:
         args: dict[str, Any],
         outcome: str,
         *,
-        extra: dict[str, Any] | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         thinking = self.pending_thinking
         self.pending_thinking = None
         entry: dict[str, Any] = {
             "ts": datetime.now(UTC).isoformat(),
             "tool": name,
-            "args": {k: v for k, v in args.items() if k != "html"},
+            "args": {k: v for k, v in args.items() if k not in ("html", "diff", "text")},
             "outcome": outcome,
         }
         if thinking:
             entry["thinking"] = thinking
-        if extra:
-            entry.update(extra)
+        if details:
+            entry["details"] = details
         self.tool_log.append(entry)
 
 
@@ -126,7 +126,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_profile",
             {},
             f"{len(text)} chars",
-            extra={"profile_snapshot": text},
+            details={"profile_snapshot": text, "profile": text},
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -139,7 +139,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         days = int(args.get("days", 30))
         events = state.store.read_recent_feedback(days=days)
         text = "\n".join(json.dumps(e) for e in events) or "(no feedback yet)"
-        state.record("read_recent_feedback", {"days": days}, f"{len(events)} events")
+        state.record(
+            "read_recent_feedback",
+            {"days": days},
+            f"{len(events)} events",
+            details={"events": events},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -157,7 +162,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             )
             or "(none)"
         )
-        state.record("read_recent_digests", {"days": days}, f"{len(items)} items")
+        state.record(
+            "read_recent_digests",
+            {"days": days},
+            f"{len(items)} items",
+            details={"items": items},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -171,7 +181,17 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "\n".join(f"{s.kind}\t{s.value}\t{s.name or ''}\t{','.join(s.tags)}" for s in sources)
             or "(no sources configured)"
         )
-        state.record("list_sources", {}, f"{len(sources)} sources")
+        state.record(
+            "list_sources",
+            {},
+            f"{len(sources)} sources",
+            details={
+                "sources": [
+                    {"kind": s.kind, "value": s.value, "name": s.name, "tags": list(s.tags)}
+                    for s in sources
+                ]
+            },
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -185,7 +205,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         try:
             entries = await fetch_rss(url, limit=limit)
             payload = [e.as_dict() for e in entries]
-            state.record("fetch_rss", {"url": url}, f"{len(payload)} entries")
+            state.record(
+                "fetch_rss",
+                {"url": url},
+                f"{len(payload)} entries",
+                details={"entries": payload},
+            )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
             log.exception("tool.fetch_rss_failed", url=url)
@@ -206,7 +231,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         try:
             entries = await fetch_youtube_channel(channel_id, limit=limit)
             payload = [e.as_dict() for e in entries]
-            state.record("fetch_youtube_channel", {"channel_id": channel_id}, f"{len(payload)}")
+            state.record(
+                "fetch_youtube_channel",
+                {"channel_id": channel_id},
+                f"{len(payload)}",
+                details={"entries": payload},
+            )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
             log.exception("tool.fetch_youtube_channel_failed", channel_id=channel_id)
@@ -225,7 +255,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         video_id = str(args["video_id"])
         try:
             t = await fetch_youtube_transcript(video_id)
-            state.record("fetch_youtube_transcript", {"video_id": video_id}, f"{len(t.text)} chars")
+            state.record(
+                "fetch_youtube_transcript",
+                {"video_id": video_id},
+                f"{len(t.text)} chars",
+                details={"text": t.text},
+            )
             return {"content": [{"type": "text", "text": t.text}]}
         except Exception as e:
             log.exception("tool.fetch_youtube_transcript_failed", video_id=video_id)
@@ -245,7 +280,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         try:
             doc = await web_fetch(url)
             payload = {"url": doc.url, "title": doc.title, "text": doc.text[:20_000]}
-            state.record("web_fetch", {"url": url}, f"{len(doc.text)} chars")
+            state.record(
+                "web_fetch",
+                {"url": url},
+                f"{len(doc.text)} chars",
+                details={"url": doc.url, "title": doc.title, "text": doc.text[:20_000]},
+            )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
             log.exception("tool.web_fetch_failed", url=url)
@@ -304,7 +344,12 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             items_out.append(item)
         state.submitted_items = items_out
         state.agent_notes = notes
-        state.record("submit_digest", {"count": len(items_out)}, "ok")
+        state.record(
+            "submit_digest",
+            {"count": len(items_out)},
+            "ok",
+            details={"items": items_out, "agent_notes": notes},
+        )
         return {
             "content": [
                 {
@@ -348,7 +393,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     )
     async def _read_profile(_args: dict[str, Any]) -> dict[str, Any]:
         text = state.store.read_profile()
-        state.record("read_profile", {}, f"{len(text)} chars")
+        state.record("read_profile", {}, f"{len(text)} chars", details={"profile": text})
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -372,7 +417,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         lines.append(json.dumps(trigger))
         text = "\n".join(lines)
         outcome = f"{len(prior)} prior events + 1 trigger"
-        state.record("read_recent_feedback", {"days": days}, outcome)
+        state.record(
+            "read_recent_feedback",
+            {"days": days},
+            outcome,
+            details={"prior_events": prior, "triggering_event": trigger},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -390,7 +440,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             )
             or "(none)"
         )
-        state.record("read_recent_digests", {"days": days}, f"{len(items)} items")
+        state.record(
+            "read_recent_digests",
+            {"days": days},
+            f"{len(items)} items",
+            details={"items": items},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -404,7 +459,17 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "\n".join(f"{s.kind}\t{s.value}\t{s.name or ''}\t{','.join(s.tags)}" for s in sources)
             or "(no sources configured)"
         )
-        state.record("list_sources", {}, f"{len(sources)} sources")
+        state.record(
+            "list_sources",
+            {},
+            f"{len(sources)} sources",
+            details={
+                "sources": [
+                    {"kind": s.kind, "value": s.value, "name": s.name, "tags": list(s.tags)}
+                    for s in sources
+                ]
+            },
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -444,7 +509,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
 
         state.store.write_sources([*sources, _Source(kind=kind, value=value, name=name, tags=tags)])
         state.sources_changed += 1
-        state.record("add_source", {"kind": kind, "value": value}, "added")
+        state.record(
+            "add_source",
+            {"kind": kind, "value": value},
+            "added",
+            details={"kind": kind, "value": value, "name": name, "tags": tags},
+        )
         return {"content": [{"type": "text", "text": f"added {kind} source: {value}"}]}
 
     @tool(
@@ -467,7 +537,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             }
         state.store.write_sources(filtered)
         state.sources_changed += 1
-        state.record("remove_source", {"kind": kind, "value": value}, "removed")
+        state.record(
+            "remove_source",
+            {"kind": kind, "value": value},
+            "removed",
+            details={"kind": kind, "value": value},
+        )
         return {"content": [{"type": "text", "text": f"removed {kind} source: {value}"}]}
 
     @tool(
@@ -482,14 +557,24 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         try:
             patched = apply_unified_diff(original, diff)
         except PatchError as e:
-            state.record("patch_profile", {}, f"rejected: {e}")
+            state.record(
+                "patch_profile",
+                {},
+                f"rejected: {e}",
+                details={"diff": diff, "before": original, "error": str(e)},
+            )
             return {
                 "content": [{"type": "text", "text": f"patch rejected: {e}"}],
                 "isError": True,
             }
         state.store.write_profile(patched)
         state.profile_patches_applied += 1
-        state.record("patch_profile", {}, "applied")
+        state.record(
+            "patch_profile",
+            {},
+            "applied",
+            details={"diff": diff, "before": original, "after": patched},
+        )
         return {"content": [{"type": "text", "text": "profile.md updated."}]}
 
     @tool(
@@ -508,6 +593,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_curation_runs",
             {"days": days},
             f"{len(runs)} runs",
+            details={"text": text, "run_ids": [r.get("run_id") for r in runs]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -546,9 +632,14 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             return {"content": [{"type": "text", "text": text}]}
         snapshot: str | None = None
         for entry in match.get("tool_log") or []:
-            if entry.get("tool") == "read_profile" and isinstance(
-                entry.get("profile_snapshot"), str
-            ):
+            if entry.get("tool") != "read_profile":
+                continue
+            # New schema nests it under details; legacy runs have it flat.
+            details = entry.get("details")
+            if isinstance(details, dict) and isinstance(details.get("profile_snapshot"), str):
+                snapshot = details["profile_snapshot"]
+                break
+            if isinstance(entry.get("profile_snapshot"), str):
                 snapshot = entry["profile_snapshot"]
                 break
         compact = _compact_curation_runs([match], max_bytes=40_000)
@@ -569,6 +660,11 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_triggering_curation_run",
             {"item_id": item_id},
             f"matched run {match.get('run_id', '?')}",
+            details={
+                "matched_run_id": match.get("run_id"),
+                "profile_snapshot": snapshot,
+                "text": text,
+            },
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -581,7 +677,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     )
     async def _read_reflection_memory(_args: dict[str, Any]) -> dict[str, Any]:
         text = state.store.read_reflection_memory()
-        state.record("read_reflection_memory", {}, f"{len(text)} chars")
+        state.record(
+            "read_reflection_memory",
+            {},
+            f"{len(text)} chars",
+            details={"text": text},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -594,7 +695,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     async def _write_reflection_memory(args: dict[str, Any]) -> dict[str, Any]:
         text = str(args.get("text") or "")
         if len(text) > 5000:
-            state.record("write_reflection_memory", {}, f"rejected: {len(text)} chars > 5000")
+            state.record(
+                "write_reflection_memory",
+                {},
+                f"rejected: {len(text)} chars > 5000",
+                details={"text": text, "rejected": True},
+            )
             return {
                 "content": [
                     {
@@ -608,7 +714,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "isError": True,
             }
         state.store.write_reflection_memory(text)
-        state.record("write_reflection_memory", {}, f"{len(text)} chars written")
+        state.record(
+            "write_reflection_memory",
+            {},
+            f"{len(text)} chars written",
+            details={"text": text},
+        )
         return {"content": [{"type": "text", "text": "reflection memory updated."}]}
 
     @tool(
@@ -619,7 +730,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     )
     async def _end_reflection(args: dict[str, Any]) -> dict[str, Any]:
         state.reflection_notes = str(args.get("notes") or "")
-        state.record("end_reflection", {}, "ok")
+        state.record("end_reflection", {}, "ok", details={"notes": state.reflection_notes})
         return {"content": [{"type": "text", "text": "reflection complete."}]}
 
     tools = [

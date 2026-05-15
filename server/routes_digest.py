@@ -138,6 +138,7 @@ class ToolCallEntry(BaseModel):
     args: dict[str, Any]
     outcome: str
     thinking: str | None = None
+    details: dict[str, Any] | None = None
 
 
 class RunSummaryOut(BaseModel):
@@ -326,6 +327,14 @@ def get_run(store: StoreDep, run_id: str) -> RunDetail:
 
     tool_log: list[ToolCallEntry] = []
     for e in run.get("tool_log") or []:
+        # Legacy runs stored profile_snapshot as a flat entry key; new runs
+        # nest all extras under `details`. Surface either to the client.
+        if (
+            isinstance(e, dict)
+            and not e.get("details")
+            and isinstance(e.get("profile_snapshot"), str)
+        ):
+            e = {**e, "details": {"profile_snapshot": e["profile_snapshot"]}}
         try:
             tool_log.append(ToolCallEntry(**e))
         except (TypeError, ValueError) as exc:

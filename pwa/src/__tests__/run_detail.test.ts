@@ -349,6 +349,89 @@ describe("renderRunDetail", () => {
     expect(document.body.textContent).toContain("UNK");
   });
 
+  it("renders an expandable details block per tool call when details are present", async () => {
+    stub({
+      "/api/runs/details": {
+        ...CURATION_RUN,
+        run_id: "details",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "12 chars",
+            details: { profile: "# Profile\nHello." },
+          },
+          {
+            ts: "t",
+            tool: "fetch_rss",
+            args: { url: "https://example.com/feed" },
+            outcome: "2 entries",
+            details: {
+              entries: [
+                { title: "Post A", url: "https://example.com/a", source: "Example" },
+                { title: "Post B", url: "https://example.com/b" },
+              ],
+            },
+          },
+          {
+            ts: "t",
+            tool: "submit_digest",
+            args: { count: 1 },
+            outcome: "ok",
+            details: {
+              items: [{ title: "Picked", url: "https://example.com/a" }],
+              agent_notes: "kept one",
+            },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "details" });
+    document.body.appendChild(el);
+    const toggles = document.querySelectorAll(".run-event-details-toggle");
+    expect(toggles.length).toBe(3);
+    // Body starts collapsed.
+    const firstBody = document.querySelector(".run-event-details-body") as HTMLElement;
+    expect(firstBody.classList.contains("collapsed")).toBe(true);
+    (toggles[0] as HTMLButtonElement).click();
+    expect(firstBody.classList.contains("collapsed")).toBe(false);
+    expect(firstBody.textContent).toContain("# Profile");
+    // RSS entries render as a list of titles with linked URLs.
+    (toggles[1] as HTMLButtonElement).click();
+    const rssBody = toggles[1].nextElementSibling as HTMLElement;
+    const links = rssBody.querySelectorAll(".run-event-detail-row-title a");
+    expect(Array.from(links).map((a) => a.textContent)).toEqual(["Post A", "Post B"]);
+    // submit_digest exposes both items and agent_notes sections.
+    (toggles[2] as HTMLButtonElement).click();
+    expect(document.body.textContent).toContain("kept one");
+  });
+
+  it("maps legacy flat profile_snapshot into details on the read_profile entry", async () => {
+    stub({
+      "/api/runs/legacy": {
+        ...CURATION_RUN,
+        run_id: "legacy",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "10 chars",
+            details: { profile_snapshot: "old profile text" },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "legacy" });
+    document.body.appendChild(el);
+    const toggle = document.querySelector(".run-event-details-toggle") as HTMLButtonElement;
+    toggle.click();
+    expect(document.body.textContent).toContain("old profile text");
+  });
+
   it("reflection run without prompts or notes still renders cleanly", async () => {
     stub({
       "/api/runs/ref-bare": {

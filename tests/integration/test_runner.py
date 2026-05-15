@@ -526,6 +526,53 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_read_triggering_curation_run_new_schema_details_snapshot(
+    tmp_data_dir: Path,
+) -> None:
+    """The new-schema path: snapshot lives under entry['details']['profile_snapshot'],
+    and non-read_profile entries are skipped."""
+    from digest.agent import RunState, build_reflection_tools
+
+    store = Store(tmp_data_dir)
+    store.ensure_layout()
+    store.append_run(
+        {
+            "run_id": "cur2",
+            "kind": "curation",
+            "started_at": "2026-05-10T08:00:00+00:00",
+            "submitted_item_ids": ["xyz98765"],
+            "tool_log": [
+                {
+                    "ts": "2026-05-10T08:00:01+00:00",
+                    "tool": "list_sources",
+                    "args": {},
+                    "outcome": "5 sources",
+                },
+                {
+                    "ts": "2026-05-10T08:00:02+00:00",
+                    "tool": "read_profile",
+                    "args": {},
+                    "outcome": "20 chars",
+                    "details": {"profile_snapshot": "# Profile\n- new schema\n"},
+                },
+            ],
+        }
+    )
+    state = RunState(store=store, today=date(2026, 5, 10))
+    state.triggering_event = {
+        "ts": "2026-05-10T11:00:00+00:00",
+        "kind": "thumb",
+        "value": "up",
+        "item_id": "xyz98765",
+    }
+    build_reflection_tools(state)
+
+    result = await state.current_tools["read_triggering_curation_run"]({})
+    text = result["content"][0]["text"]
+    assert "new schema" in text
+
+
+@pytest.mark.asyncio
 async def test_read_triggering_curation_run_legacy_run_without_snapshot(
     tmp_data_dir: Path,
 ) -> None:
@@ -659,7 +706,7 @@ async def test_curation_read_profile_captures_snapshot(
     await state.current_tools["read_profile"]({})
     entry = state.tool_log[-1]
     assert entry["tool"] == "read_profile"
-    assert entry.get("profile_snapshot", "").startswith("# Profile")
+    assert entry.get("details", {}).get("profile_snapshot", "").startswith("# Profile")
 
 
 @pytest.mark.asyncio
