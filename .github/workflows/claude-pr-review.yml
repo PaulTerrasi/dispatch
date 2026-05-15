@@ -29,7 +29,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Bash(jq:*),Bash(cat:*),Bash(mktemp:*),Read,Grep,Glob,Write"'
+          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Read,Grep,Glob,Write"'
           prompt: |
             Review pull request #${{ github.event.pull_request.number }} in
             ${{ github.repository }}.
@@ -49,24 +49,26 @@ jobs:
                (default behavior — not a plain top-level comment). Build a
                JSON payload and submit it with the reviews API:
 
-                 ```
-                 cat > /tmp/review.json <<'JSON'
-                 {
-                   "body": "<concise markdown summary grouped by severity>",
-                   "event": "COMMENT",
-                   "comments": [
-                     {"path": "path/to/file.py", "line": 42, "side": "RIGHT",
-                      "body": "<finding tied to this line>"},
-                     {"path": "path/to/other.py", "start_line": 10,
-                      "start_side": "RIGHT", "line": 15, "side": "RIGHT",
-                      "body": "<finding spanning a range>"}
-                   ]
-                 }
-                 JSON
-                 gh api -X POST \
-                   repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
-                   --input /tmp/review.json
-                 ```
+               a. Use the `Write` tool to create `/tmp/review.json` with this
+                  exact shape:
+
+                    {
+                      "body": "<concise markdown summary grouped by severity>",
+                      "event": "COMMENT",
+                      "comments": [
+                        {"path": "path/to/file.py", "line": 42, "side": "RIGHT",
+                         "body": "<finding tied to this line>"},
+                        {"path": "path/to/other.py", "start_line": 10,
+                         "start_side": "RIGHT", "line": 15, "side": "RIGHT",
+                         "body": "<finding spanning a range>"}
+                      ]
+                    }
+
+               b. Submit it with one Bash call:
+
+                    gh api --method POST \
+                      repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+                      --input /tmp/review.json
 
                Rules for inline comments:
                - `path` must match a file in the PR diff exactly.
