@@ -147,8 +147,11 @@ class MorningDigestStack(cdk.Stack):
         # Make the Node heap ceiling explicit for the bundled Claude CLI
         # subprocess. Node's cgroup-based default detection isn't guaranteed
         # to follow the Lambda memory bump, and we've seen silent exit-1
-        # crashes consistent with heap pressure. 1536MB leaves ~512MB for
-        # the uvicorn Python process inside the same 2048MB Lambda.
+        # crashes consistent with heap pressure. --max-old-space-size caps
+        # only the V8 old generation; total Node RSS adds ~150-200 MB on
+        # top (new-space, code cache, stack), so 1536 caps Node at ~1.7 GB
+        # and leaves ~300 MB for the uvicorn Python process in the same
+        # 2048 MB Lambda.
         api_env["NODE_OPTIONS"] = "--max-old-space-size=1536"
         api_fn = lambda_.DockerImageFunction(
             self,
