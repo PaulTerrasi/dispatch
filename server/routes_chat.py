@@ -203,7 +203,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
                     },
                 )
             )
-        except Exception as e:  # pragma: no cover — surfaced to client
+        except Exception as e:
             exit_code = getattr(e, "exit_code", None)
             cli_stderr = getattr(e, "stderr", None)
             buffered_stderr = "\n".join(cli_stderr_buffer) if cli_stderr_buffer else None
