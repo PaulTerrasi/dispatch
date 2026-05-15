@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from digest.s3_store import S3Store
@@ -83,5 +86,16 @@ def resolve_ssm_env_vars() -> None:
         if val.startswith("/"):
             try:
                 os.environ[key] = _read_ssm(val)
-            except Exception:
+            except Exception as exc:
+                # ParameterNotFound is the expected case before the cookie
+                # refresh job has populated SSM for the first time. Log
+                # everything else (e.g. AccessDeniedException from a wrong IAM
+                # policy) so cold-start misconfiguration surfaces in CloudWatch.
+                log.warning(
+                    "optional SSM param %s for env var %s could not be read (%s); "
+                    "proceeding with empty value",
+                    val,
+                    key,
+                    exc,
+                )
                 os.environ[key] = ""

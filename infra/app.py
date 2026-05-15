@@ -26,7 +26,9 @@ from constructs import Construct
 # SSM parameter paths — values resolved at Lambda/Fargate cold start.
 _SSM_CLAUDE_TOKEN = "/morning-digest/claude-oauth-token"
 _SSM_AUTH_TOKEN = "/morning-digest/auth-token"
-# NYT_COOKIES is populated out-of-band by a local refresh job (see README).
+# NYT_COOKIES is populated out-of-band by scripts/refresh_nyt_cookies.py
+# running on a personal machine where the user is logged into NYT. See the
+# "NYT subscription cookies" section of the README for install instructions.
 # Treated as optional — runtime tolerates a missing parameter.
 _SSM_NYT_COOKIES = "/morning-digest/nyt-cookies"
 
