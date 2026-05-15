@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from digest.agent import RunState, build_chat_tools
 from digest.store import Store
 from server.app import create_app
-from server.routes_chat import _sse, _translate
+from server.routes_chat import _sse, _summarize_message, _translate
 
 
 @pytest.fixture
@@ -321,6 +321,74 @@ def test_translate_drops_other_message_types() -> None:
     assert _translate({"type": "result"}) == []
 
 
+# ── _summarize_message ─────────────────────────────────────────────────────
+
+
+def test_summarize_stream_event_includes_event_and_delta_types() -> None:
+    msg = StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_delta", "delta": {"type": "text_delta", "text": "x"}},
+    )
+    assert _summarize_message(msg) == {
+        "type": "StreamEvent",
+        "event_type": "content_block_delta",
+        "delta_type": "text_delta",
+    }
+
+
+def test_summarize_stream_event_without_delta_block() -> None:
+    msg = StreamEvent(uuid="u", session_id="s", event={"type": "message_start"})
+    assert _summarize_message(msg) == {
+        "type": "StreamEvent",
+        "event_type": "message_start",
+    }
+
+
+def test_summarize_assistant_message_lists_tool_use_names() -> None:
+    msg = AssistantMessage(
+        model="x",
+        content=[
+            TextBlock(text="hi"),
+            ToolUseBlock(id="t1", name="read_profile", input={}),
+        ],
+    )
+    assert _summarize_message(msg) == {
+        "type": "AssistantMessage",
+        "blocks": ["TextBlock", "tool_use:read_profile"],
+    }
+
+
+def test_summarize_user_message_collects_tool_results_and_errors() -> None:
+    msg = UserMessage(
+        content=[
+            ToolResultBlock(tool_use_id="t1", content="ok", is_error=False),
+            ToolResultBlock(tool_use_id="t2", content="bad", is_error=True),
+        ]
+    )
+    assert _summarize_message(msg) == {
+        "type": "UserMessage",
+        "tool_results": [
+            {"tool_use_id": "t1", "is_error": False},
+            {"tool_use_id": "t2", "is_error": True},
+        ],
+    }
+
+
+def test_summarize_user_message_with_string_content() -> None:
+    msg = UserMessage(content="plain string")
+    assert _summarize_message(msg) == {"type": "UserMessage", "tool_results": []}
+
+
+def test_summarize_user_message_ignores_non_tool_result_blocks() -> None:
+    msg = UserMessage(content=[TextBlock(text="hi")])
+    assert _summarize_message(msg) == {"type": "UserMessage", "tool_results": []}
+
+
+def test_summarize_unknown_message_falls_back_to_class_name() -> None:
+    assert _summarize_message({"foo": "bar"}) == {"type": "dict"}
+
+
 # ── full /api/chat/stream SSE flow ───────────────────────────────────────────
 
 
@@ -576,3 +644,45 @@ def test_talk_error_frame_omits_optional_fields_when_unavailable(
     data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
     payload = json.loads(data_line[len(b"data: ") :])
     assert payload == {"message": "kaboom"}
+
+
+def test_talk_surfaces_recent_cli_messages_on_crash(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the CLI subprocess exits silently with no stderr, the SSE error
+    frame must still carry summaries of the last SDK messages so we can see
+    what the agent was doing right before the crash."""
+    import server.routes_chat as rt
+
+    class _CrashAfterMessages:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield AssistantMessage(
+                model="x", content=[ToolUseBlock(id="t1", name="read_profile", input={})]
+            )
+            yield UserMessage(
+                content=[ToolResultBlock(tool_use_id="t1", content="ok", is_error=False)]
+            )
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _CrashAfterMessages())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    error_line = next(line for line in body.split(b"\n\n") if line.startswith(b"event: error"))
+    data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
+    payload = json.loads(data_line[len(b"data: ") :])
+    assert payload["cli_recent_messages"] == [
+        {"type": "AssistantMessage", "blocks": ["tool_use:read_profile"]},
+        {
+            "type": "UserMessage",
+            "tool_results": [{"tool_use_id": "t1", "is_error": False}],
+        },
+    ]
