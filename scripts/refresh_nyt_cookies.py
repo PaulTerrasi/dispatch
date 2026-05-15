@@ -72,7 +72,13 @@ def extract_nyt_cookies(browser: str | None) -> str:
             last_err = e
             log.debug("browser %s unavailable: %s", name, e)
             continue
-        pairs = [(c.name, c.value) for c in jar if "nytimes.com" in (c.domain or "")]
+        # http.cookiejar.Cookie.value is Optional[str]; drop valueless cookies
+        # so we don't serialize them as the literal string "name=None".
+        pairs = [
+            (c.name, c.value)
+            for c in jar
+            if "nytimes.com" in (c.domain or "") and c.value is not None
+        ]
         if pairs:
             log.info("found %d NYT cookies in %s", len(pairs), name)
             return "; ".join(f"{n}={v}" for n, v in pairs)
