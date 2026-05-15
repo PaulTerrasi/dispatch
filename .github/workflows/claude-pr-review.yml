@@ -29,15 +29,18 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Read,Grep,Glob"'
+          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Read,Grep,Glob,Write"'
           prompt: |
             Review pull request #${{ github.event.pull_request.number }} in
-            ${{ github.repository }}.
+            ${{ github.repository }}, then write a single JSON review
+            payload to `${{ github.workspace }}/review.json`. A separate
+            workflow step will POST it. Do NOT call the reviews API
+            yourself.
 
             Steps:
-            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to read
-               the diff. Read surrounding code with `gh` or local files as
-               needed.
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to
+               read the diff. Read surrounding code with `gh` or local
+               files as needed.
             2. Evaluate the change for:
                - Correctness, bugs, likely regressions
                - Security (injection, auth, secrets, unsafe deserialization)
@@ -45,15 +48,75 @@ jobs:
                  Pi/SSH/systemd path), storage through `digest.store.Store`,
                  Python deps via pyproject + uv.lock
                - Test coverage for new behavior
-            3. Post the review by running:
-               `gh pr review ${{ github.event.pull_request.number }} --comment --body-file <file>`
-               where <file> contains a concise markdown summary (findings
-               grouped by severity, file:line references). If there are no
-               material issues, post a short "LGTM — no blocking issues"
-               comment so it is visible the review ran.
+            3. Use the `Write` tool to create
+               `${{ github.workspace }}/review.json` with this exact shape:
+
+                 {
+                   "body": "<concise markdown summary grouped by severity>",
+                   "event": "COMMENT",
+                   "comments": [
+                     {"path": "path/to/file.py", "line": 42, "side": "RIGHT",
+                      "body": "<finding tied to this line>"},
+                     {"path": "path/to/other.py", "start_line": 10,
+                      "start_side": "RIGHT", "line": 15, "side": "RIGHT",
+                      "body": "<finding spanning a range>"}
+                   ]
+                 }
+
+               Rules:
+               - Inline `comments` are the default and primary output.
+                 Anchor every finding to the specific line(s) it concerns;
+                 use `body` only for the cross-cutting summary.
+               - `path` must match a file in the PR diff exactly.
+               - `line` must be a line that appears in the diff hunk on the
+                 chosen `side` (`RIGHT` for added/context lines on the new
+                 file, `LEFT` for removed lines on the old file). Lines
+                 outside the diff will be rejected.
+               - For a multi-line range, set `start_line` + `start_side`
+                 in addition to `line` + `side`.
+               - If there are no material issues, write the file with
+                 `"comments": []` and a short body like
+                 `"LGTM — no blocking issues"`.
+
+               After writing the file, stop. The next step posts it.
 
             Be concise. Skip nits unless they materially affect readability
             or correctness.
+
+      - name: Post review
+        id: post
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          PAYLOAD: ${{ github.workspace }}/review.json
+        run: |
+          set -euo pipefail
+          if [ ! -s "$PAYLOAD" ]; then
+            echo "No review payload at $PAYLOAD; skipping post."
+            exit 0
+          fi
+          if ! jq -e . "$PAYLOAD" >/dev/null; then
+            echo "Payload is not valid JSON:"
+            cat "$PAYLOAD"
+            exit 1
+          fi
+          echo "Submitting review (with inline comments)..."
+          if gh api --method POST "repos/$REPO/pulls/$PR/reviews" \
+              --input "$PAYLOAD" >/tmp/review-resp.json 2>/tmp/review-err.txt; then
+            echo "Inline review posted."
+            exit 0
+          fi
+          echo "Inline review POST failed:"
+          cat /tmp/review-err.txt
+          # Fall back to a comment-only review so the findings still land
+          # on the PR even if one or more inline positions were rejected.
+          echo "Falling back to comment-only review."
+          jq '{body: ((.body // "") + "\n\n_(inline comments could not be attached; see workflow log for details)_"), event: "COMMENT"}' \
+            "$PAYLOAD" > /tmp/review-fallback.json
+          gh api --method POST "repos/$REPO/pulls/$PR/reviews" \
+            --input /tmp/review-fallback.json
 
       - name: Verify Claude posted something
         if: always()
@@ -66,16 +129,16 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          # Count reviews + issue comments created at/after STARTED, by anyone
-          # other than the PR author. This catches reviews Claude posted and
-          # also surface comments.
           reviews=$(gh api "repos/$REPO/pulls/$PR/reviews" \
             --jq "[.[] | select(.submitted_at >= \"$STARTED\")] | length")
+          inline=$(gh api "repos/$REPO/pulls/$PR/comments" \
+            --jq "[.[] | select(.created_at >= \"$STARTED\")] | length")
           comments=$(gh api "repos/$REPO/issues/$PR/comments" \
             --jq "[.[] | select(.created_at >= \"$STARTED\") | select(.user.login != \"coderabbitai[bot]\")] | length")
           echo "New reviews since $STARTED: $reviews"
-          echo "New comments since $STARTED: $comments"
-          if [ "$reviews" -gt 0 ] || [ "$comments" -gt 0 ]; then
+          echo "New inline review comments since $STARTED: $inline"
+          echo "New issue comments since $STARTED: $comments"
+          if [ "$reviews" -gt 0 ] || [ "$inline" -gt 0 ] || [ "$comments" -gt 0 ]; then
             echo "Claude posted output — verification passed."
             exit 0
           fi
