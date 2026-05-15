@@ -150,7 +150,11 @@ class MorningDigestStack(cdk.Stack):
             function_name="morning-digest-api",
             code=lambda_image,
             role=app_role,
-            memory_size=1024,
+            # 2048MB: the bundled Claude CLI subprocess (Node.js) was exiting
+            # silently with code 1 mid-chat at 1024MB, with no stderr lines
+            # captured — consistent with Node heap pressure inside the
+            # subprocess even though the Lambda itself was well under its limit.
+            memory_size=2048,
             # 5-minute cap so a long chat-tab agent turn (with tool calls that
             # may web_fetch) cannot hit the Lambda max. Most invocations finish
             # in seconds.
