@@ -693,8 +693,7 @@ def _render_recent_digests_with_feedback(state: RunState, *, days: int = 21) -> 
     `update_item_feedback` when the user reacts) is included inline. Format
     matches what the system prompt advertises: date\\tsource\\ttitle\\turl\\tfeedback.
     """
-    today = state.today or datetime.now(UTC).date()
-    cutoff = today - timedelta(days=days)
+    cutoff = state.today - timedelta(days=days)
     lines: list[str] = []
     # list_digests() returns dates newest-first, so we can stop at the cutoff.
     for d in state.store.list_digests():
