@@ -220,6 +220,10 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
             if cli_stderr:
                 payload["cli_stderr"] = cli_stderr
             if buffered_stderr:
+                # Forwarded to the browser intentionally: single-tenant
+                # personal app, the buffered lines are what makes the failure
+                # actionable for the user. Revisit if this ever becomes
+                # multi-tenant or the CLI starts emitting credential fragments.
                 payload["cli_stderr_buffered"] = buffered_stderr
             await out_queue.put(_sse("error", payload))
         finally:
