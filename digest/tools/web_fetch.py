@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import httpx
@@ -16,7 +17,44 @@ class WebDocument:
     html: str  # readability's cleaned HTML body
 
 
-_MAX_BYTES = 2_000_000  # don't try to read 50MB pages on a Pi
+_MAX_BYTES = 2_000_000  # cap page size before handing HTML to readability
+
+# A current browser UA. NYT (and other paywalled outlets) check the UA as
+# part of bot detection — an outdated Chrome version is one of the first
+# signals they flag. Bump this when Chrome ships a few major versions past
+# the value here. (macOS string is frozen at 10_15_7 in real Chrome UAs.)
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/149.0.0.0 Safari/537.36"
+)
+
+
+def _build_cookie_jar() -> httpx.Cookies:
+    """Build an httpx cookie jar from NYT_COOKIES.
+
+    NYT_COOKIES is a raw Cookie header value (``name=value; name=value``)
+    copied from a browser session; populated from SSM at cold start. Cookies
+    are scoped to ``.nytimes.com`` so httpx only sends them on requests to
+    nytimes.com hosts — fetches to other domains are unaffected.
+    """
+    jar = httpx.Cookies()
+    raw = os.environ.get("NYT_COOKIES", "").strip()
+    if raw.lower().startswith("cookie:"):
+        raw = raw.split(":", 1)[1].strip()
+    if not raw:
+        return jar
+    for pair in raw.split(";"):
+        pair = pair.strip()
+        if not pair or "=" not in pair:
+            continue
+        name, value = pair.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            continue
+        jar.set(name, value, domain=".nytimes.com", path="/")
+    return jar
 
 
 async def web_fetch(url: str, *, client: httpx.AsyncClient | None = None) -> WebDocument:
@@ -24,7 +62,8 @@ async def web_fetch(url: str, *, client: httpx.AsyncClient | None = None) -> Web
     c = client or httpx.AsyncClient(
         timeout=20.0,
         follow_redirects=True,
-        headers={"User-Agent": "dispatch/0.1"},
+        headers={"User-Agent": _USER_AGENT},
+        cookies=_build_cookie_jar(),
     )
     try:
         resp = await c.get(url)

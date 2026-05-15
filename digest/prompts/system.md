@@ -29,7 +29,9 @@ want it now.
 
    c. For promising results, use `WebFetch` or `web_fetch` to read the full
       article. Prefer primary sources — the original paper, announcement, or
-      repository — over recap blogs.
+      repository — over recap blogs. For any `nytimes.com` URL, always use
+      `web_fetch` — it carries the user's subscription cookies and gets past
+      the paywall; `WebFetch` does not.
 
    d. Set `source` to the article's domain (e.g. `"simonwillison.net"`). This
       lets reflection track which domains consistently produce good content.

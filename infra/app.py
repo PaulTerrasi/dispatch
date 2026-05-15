@@ -26,6 +26,11 @@ from constructs import Construct
 # SSM parameter paths — values resolved at Lambda/Fargate cold start.
 _SSM_CLAUDE_TOKEN = "/morning-digest/claude-oauth-token"
 _SSM_AUTH_TOKEN = "/morning-digest/auth-token"
+# NYT_COOKIES is populated out-of-band by scripts/refresh_nyt_cookies.py
+# running on a personal machine where the user is logged into NYT. See the
+# "NYT subscription cookies" section of the README for install instructions.
+# Treated as optional — runtime tolerates a missing parameter.
+_SSM_NYT_COOKIES = "/morning-digest/nyt-cookies"
 
 # Where alarm notifications go.
 _ALERT_EMAIL = "paul.a.terrasi@gmail.com"
@@ -122,6 +127,7 @@ class MorningDigestStack(cdk.Stack):
             "MORNING_DIGEST_S3_BUCKET": data_bucket.bucket_name,
             "CLAUDE_CODE_OAUTH_TOKEN": _SSM_CLAUDE_TOKEN,
             "MORNING_DIGEST_AUTH_TOKEN": _SSM_AUTH_TOKEN,
+            "NYT_COOKIES": _SSM_NYT_COOKIES,
         }
 
         # ── Lambda: FastAPI via AWS Lambda Web Adapter (uvicorn on :8080) ──

@@ -99,3 +99,111 @@ async def test_web_fetch_extracts_main_text():
     assert "second paragraph" in doc.text
     # readability typically drops boilerplate; we don't insist on an exact match,
     # only that body content is present.
+
+
+@pytest.mark.asyncio
+async def test_cookie_jar_sends_nyt_cookies_to_nytimes(monkeypatch):
+    """NYT_COOKIES env var is sent as Cookie header on nytimes.com requests."""
+    import digest.tools.web_fetch as wf
+
+    monkeypatch.setenv("NYT_COOKIES", "NYT-S=abc123; nyt-auth-method=sso")
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["cookie"] = request.headers.get("cookie", "")
+        captured["user-agent"] = request.headers.get("user-agent", "")
+        return httpx.Response(200, content=SAMPLE_HTML)
+
+    real_client_cls = wf.httpx.AsyncClient
+
+    class _StubClient(real_client_cls):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(wf.httpx, "AsyncClient", _StubClient)
+    await wf.web_fetch("https://www.nytimes.com/2026/05/15/example.html")
+    assert "NYT-S=abc123" in captured["cookie"]
+    assert "nyt-auth-method=sso" in captured["cookie"]
+    # Real browser UA — NYT serves different markup to non-browser clients.
+    assert "Mozilla" in captured["user-agent"]
+
+
+@pytest.mark.asyncio
+async def test_cookie_jar_does_not_leak_to_other_hosts(monkeypatch):
+    """NYT cookies must not be sent to non-nytimes.com hosts."""
+    import digest.tools.web_fetch as wf
+
+    monkeypatch.setenv("NYT_COOKIES", "NYT-S=secret-token")
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["cookie"] = request.headers.get("cookie", "")
+        return httpx.Response(200, content=SAMPLE_HTML)
+
+    real_client_cls = wf.httpx.AsyncClient
+
+    class _StubClient(real_client_cls):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(wf.httpx, "AsyncClient", _StubClient)
+    await wf.web_fetch("https://example.com/article")
+    assert "NYT-S" not in captured["cookie"]
+    assert "secret-token" not in captured["cookie"]
+
+
+@pytest.mark.asyncio
+async def test_cookie_jar_handles_missing_env(monkeypatch):
+    """Without NYT_COOKIES set, fetch still works and sends no cookie header."""
+    import digest.tools.web_fetch as wf
+
+    monkeypatch.delenv("NYT_COOKIES", raising=False)
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["cookie"] = request.headers.get("cookie", "")
+        return httpx.Response(200, content=SAMPLE_HTML)
+
+    real_client_cls = wf.httpx.AsyncClient
+
+    class _StubClient(real_client_cls):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(wf.httpx, "AsyncClient", _StubClient)
+    doc = await wf.web_fetch("https://www.nytimes.com/article")
+    assert "first paragraph" in doc.text
+    assert captured["cookie"] == ""
+
+
+def test_build_cookie_jar_strips_cookie_prefix(monkeypatch):
+    """Tolerate users pasting a full `Cookie: name=value` line."""
+    import digest.tools.web_fetch as wf
+
+    monkeypatch.setenv("NYT_COOKIES", "Cookie: NYT-S=xyz; foo=bar")
+    jar = wf._build_cookie_jar()
+    cookies = {c.name: (c.value, c.domain) for c in jar.jar}
+    assert cookies["NYT-S"] == ("xyz", ".nytimes.com")
+    assert cookies["foo"] == ("bar", ".nytimes.com")
+
+
+def test_build_cookie_jar_ignores_empty_env(monkeypatch):
+    import digest.tools.web_fetch as wf
+
+    monkeypatch.delenv("NYT_COOKIES", raising=False)
+    jar = wf._build_cookie_jar()
+    assert len(list(jar.jar)) == 0
+
+
+def test_build_cookie_jar_skips_malformed_pairs(monkeypatch):
+    """Tolerate stray semicolons, missing '=', and empty names from manual pastes."""
+    import digest.tools.web_fetch as wf
+
+    # Trailing semicolon (empty pair); a token with no '='; an empty name.
+    monkeypatch.setenv("NYT_COOKIES", "NYT-S=abc; ; orphan; =nokey; foo=bar;")
+    jar = wf._build_cookie_jar()
+    names = {c.name for c in jar.jar}
+    assert names == {"NYT-S", "foo"}
