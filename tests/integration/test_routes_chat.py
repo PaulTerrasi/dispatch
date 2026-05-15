@@ -325,7 +325,7 @@ def test_talk_emits_profile_changed_event_on_successful_write(
             # Yield a no-op message so the generator drains.
             await asyncio.sleep(0)
             return
-            yield  # pragma: no cover -- makes this method an async generator -- makes this an async generator
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _PushRunner())
 
