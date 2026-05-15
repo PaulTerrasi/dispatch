@@ -10,7 +10,10 @@ export async function renderDigestDay(params: Record<string, string>): Promise<H
   root.appendChild(
     renderPageHeader({
       title: formatDate(date),
-      subtitle: digest && digest.items.length ? `${digest.items.length} reacted items` : undefined,
+      subtitle:
+        digest && digest.items.length
+          ? `${digest.items.length} reacted item${digest.items.length === 1 ? "" : "s"}`
+          : undefined,
     }),
   );
 

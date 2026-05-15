@@ -307,16 +307,20 @@ describe("api auth headers", () => {
     const prev = env.VITE_AUTH_TOKEN;
     env.VITE_AUTH_TOKEN = "secret-token";
 
-    // Re-import the module so the new env is picked up.
-    vi.resetModules();
-    const reloaded = await import("../api");
-    const f = stubResponses({ "/api/digest/today": { body: { date: "x", items: [] } } });
-    await reloaded.api.today();
-    const init = f.mock.calls[0][1] as RequestInit;
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer secret-token");
-
-    env.VITE_AUTH_TOKEN = prev;
-    vi.resetModules();
+    try {
+      // Re-import the module so the new env is picked up.
+      vi.resetModules();
+      const reloaded = await import("../api");
+      const f = stubResponses({ "/api/digest/today": { body: { date: "x", items: [] } } });
+      await reloaded.api.today();
+      const init = f.mock.calls[0][1] as RequestInit;
+      const headers = init.headers as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer secret-token");
+    } finally {
+      // Cleanup is unconditional — a failing assertion above otherwise
+      // leaks the mutated env into subsequent tests.
+      env.VITE_AUTH_TOKEN = prev;
+      vi.resetModules();
+    }
   });
 });

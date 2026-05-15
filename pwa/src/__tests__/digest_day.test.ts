@@ -66,7 +66,7 @@ describe("renderDigestDay", () => {
     expect((document.querySelector(".back-link") as HTMLAnchorElement).href).toContain("/archive");
   });
 
-  it("subtitle shows the reacted-item count when present", async () => {
+  it("subtitle renders the reacted-item count with correct pluralization", async () => {
     stub({
       "/api/digest/2026-05-14": {
         date: "2026-05-14",
@@ -78,6 +78,26 @@ describe("renderDigestDay", () => {
     const el = await renderDigestDay({ date: "2026-05-14" });
     document.body.appendChild(el);
     const subtitle = document.querySelector(".page-subtitle") as HTMLElement;
-    expect(subtitle.textContent).toContain("1 reacted items");
+    expect(subtitle.textContent).toContain("1 reacted item");
+    expect(subtitle.textContent).not.toContain("1 reacted items");
+  });
+
+  it("subtitle uses the plural form when multiple items are reacted", async () => {
+    stub({
+      "/api/digest/2026-05-14": {
+        date: "2026-05-14",
+        items: [
+          { id: "a", type: "article", title: "T", source: "s", url: "u", summary: "" },
+          { id: "b", type: "article", title: "U", source: "s", url: "u", summary: "" },
+        ],
+        agent_notes: "",
+        runs: [],
+      },
+    });
+    const el = await renderDigestDay({ date: "2026-05-14" });
+    document.body.appendChild(el);
+    expect((document.querySelector(".page-subtitle") as HTMLElement).textContent).toContain(
+      "2 reacted items",
+    );
   });
 });
