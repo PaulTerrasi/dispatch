@@ -75,8 +75,12 @@ body {
 /* Hide native scrollbars everywhere — content still scrolls, just without the
    visible track. Removes the brief scrollbar flash Safari paints while the
    viewport resizes around the keyboard, and the persistent bar on Windows /
-   Chrome when content overflows by a line or two. */
-html {
+   Chrome when content overflows by a line or two.
+
+   `scrollbar-width` is not inherited, so it has to apply to every element to
+   cover inner scroll containers (chat transcript, profile drawer) in Firefox
+   — matching the `*::-webkit-scrollbar` scope in WebKit/Blink. */
+* {
   scrollbar-width: none;
 }
 *::-webkit-scrollbar {
