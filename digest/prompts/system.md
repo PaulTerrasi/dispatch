@@ -71,7 +71,7 @@ want it now.
 
 `submit_digest` takes:
 
-- `items`: array of `{type: "article"|"video", title, source, url, summary, summary_more, duration_min?}`
+- `items`: array of `{type: "article"|"video", title, source, url, summary, summary_more?, duration_min?}`
 - `agent_notes`: string
 
 After it returns, you are done.
