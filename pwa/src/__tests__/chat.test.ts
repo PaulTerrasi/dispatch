@@ -224,15 +224,21 @@ describe("renderChat — loadItems / persistItems", () => {
     expect(pre.textContent).toBe("raw string input");
   });
 
-  it("replays reasoning items as collapsible cards", async () => {
+  it("never persists reasoning items, and drops any legacy reasoning entries on load", async () => {
     stubProfileFetch();
-    localStorage.setItem(TURNS_KEY, JSON.stringify([{ kind: "reasoning", text: "deep thoughts" }]));
+    // Pre-existing localStorage may contain reasoning items from older builds;
+    // we drop them on load (they aren't conversation state).
+    localStorage.setItem(
+      TURNS_KEY,
+      JSON.stringify([
+        { kind: "msg", role: "user", text: "kept" },
+        { kind: "reasoning", text: "deep thoughts" },
+      ]),
+    );
     const el = await renderChat();
     document.body.appendChild(el);
-    expect(document.querySelectorAll(".chat-reasoning").length).toBe(1);
-    expect((document.querySelector(".chat-reasoning-body") as HTMLElement).textContent).toBe(
-      "deep thoughts",
-    );
+    expect(document.querySelectorAll(".chat-msg").length).toBe(1);
+    expect(document.querySelectorAll(".chat-reasoning").length).toBe(0);
   });
 
   it("ignores malformed entries (non-objects, bad kinds, wrong types)", async () => {
@@ -245,7 +251,6 @@ describe("renderChat — loadItems / persistItems", () => {
         { kind: "msg", role: "bogus", text: "x" },
         { kind: "tool", id: 1, label: "x", status: "ok" }, // id not a string
         { kind: "tool", id: "y", label: "x", status: "unknown" },
-        { kind: "reasoning", text: 5 }, // text not a string
         { kind: "msg", role: "user", text: "kept" },
       ]),
     );
@@ -253,7 +258,6 @@ describe("renderChat — loadItems / persistItems", () => {
     document.body.appendChild(el);
     expect(document.querySelectorAll(".chat-msg").length).toBe(1);
     expect(document.querySelectorAll(".chat-tool-card").length).toBe(0);
-    expect(document.querySelectorAll(".chat-reasoning").length).toBe(0);
   });
 
   it("handles non-array JSON in localStorage by starting empty", async () => {
@@ -446,6 +450,10 @@ describe("renderChat — send / reset / streaming", () => {
     handlers.onText?.("Answer.");
     expect(card.classList.contains("streaming")).toBe(false);
     expect(document.querySelectorAll(".chat-msg").length).toBe(2);
+    // Reasoning never lands in localStorage — it's display-only and would
+    // bloat the persisted blob on extended-thinking turns.
+    const persisted = JSON.parse(localStorage.getItem(TURNS_KEY)!);
+    expect(persisted.some((it: { kind?: string }) => it.kind === "reasoning")).toBe(false);
   });
 
   it("ProfileChanged triggers a profile refetch", async () => {

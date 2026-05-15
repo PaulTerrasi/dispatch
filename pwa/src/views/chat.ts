@@ -57,9 +57,9 @@ function loadItems(): Item[] {
         if (t.input !== undefined) item.input = t.input;
         if (typeof t.output === "string") item.output = t.output;
         out.push(item);
-      } else if (t.kind === "reasoning" && typeof t.text === "string") {
-        out.push({ kind: "reasoning", text: t.text });
       }
+      // Reasoning items are never persisted (see `persistItems`); any legacy
+      // `{ kind: "reasoning" }` entries are silently dropped.
     }
     return out;
   } catch {
@@ -69,7 +69,12 @@ function loadItems(): Item[] {
 
 function persistItems(items: Item[]): void {
   try {
-    localStorage.setItem(TURNS_KEY, JSON.stringify(items));
+    // Reasoning is display-only — it doesn't ride along in the conversation
+    // history sent to the model, and an extended-thinking turn can produce
+    // tens of KB of deltas. Skip it to keep localStorage bounded and avoid
+    // write amplification on every reasoning delta.
+    const persistable = items.filter((it) => it.kind !== "reasoning");
+    localStorage.setItem(TURNS_KEY, JSON.stringify(persistable));
   } catch {
     // ignore quota / serialization errors
   }
@@ -321,10 +326,9 @@ export async function renderChat(): Promise<HTMLElement> {
   for (const it of items) {
     if (it.kind === "msg") {
       appendMessage(it);
-    } else if (it.kind === "tool") {
+    } else {
+      // The other persistable kind is "tool" (reasoning is never persisted).
       appendTool(it);
-    } else if (it.kind === "reasoning") {
-      appendReasoning(it);
     }
   }
 
