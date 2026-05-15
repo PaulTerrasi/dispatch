@@ -94,7 +94,7 @@ class RunState:
         }
         if thinking:
             entry["thinking"] = thinking
-        if details:
+        if details is not None:
             entry["details"] = details
         self.tool_log.append(entry)
 
@@ -520,7 +520,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "patch_profile",
                 {},
                 f"rejected: {e}",
-                details={"diff": diff, "before": original, "error": str(e)},
+                details={"diff": diff, "error": str(e)},
             )
             return {
                 "content": [{"type": "text", "text": f"patch rejected: {e}"}],
@@ -532,7 +532,10 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "patch_profile",
             {},
             "applied",
-            details={"diff": diff, "before": original, "after": patched},
+            # The diff alone is enough to reconstruct the change; storing both
+            # `before` and `after` would duplicate the full profile on every
+            # patch call (and `after` of call N = `before` of call N+1 anyway).
+            details={"diff": diff},
         )
         return {"content": [{"type": "text", "text": "profile.md updated."}]}
 
@@ -659,7 +662,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "write_reflection_memory",
                 {},
                 f"rejected: {len(text)} chars > 5000",
-                details={"text": text, "rejected": True},
+                details={"text": text[:5000], "rejected": True},
             )
             return {
                 "content": [
