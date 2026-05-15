@@ -29,7 +29,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Read,Grep,Glob"'
+          claude_args: '--allowed-tools "Bash(gh:*),Bash(git:*),Bash(jq:*),Bash(cat:*),Bash(mktemp:*),Read,Grep,Glob,Write"'
           prompt: |
             Review pull request #${{ github.event.pull_request.number }} in
             ${{ github.repository }}.
@@ -45,12 +45,46 @@ jobs:
                  Pi/SSH/systemd path), storage through `digest.store.Store`,
                  Python deps via pyproject + uv.lock
                - Test coverage for new behavior
-            3. Post the review by running:
-               `gh pr review ${{ github.event.pull_request.number }} --comment --body-file <file>`
-               where <file> contains a concise markdown summary (findings
-               grouped by severity, file:line references). If there are no
-               material issues, post a short "LGTM — no blocking issues"
-               comment so it is visible the review ran.
+            3. Post the review as a SINGLE GitHub review with INLINE comments
+               (default behavior — not a plain top-level comment). Build a
+               JSON payload and submit it with the reviews API:
+
+                 ```
+                 cat > /tmp/review.json <<'JSON'
+                 {
+                   "body": "<concise markdown summary grouped by severity>",
+                   "event": "COMMENT",
+                   "comments": [
+                     {"path": "path/to/file.py", "line": 42, "side": "RIGHT",
+                      "body": "<finding tied to this line>"},
+                     {"path": "path/to/other.py", "start_line": 10,
+                      "start_side": "RIGHT", "line": 15, "side": "RIGHT",
+                      "body": "<finding spanning a range>"}
+                   ]
+                 }
+                 JSON
+                 gh api -X POST \
+                   repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+                   --input /tmp/review.json
+                 ```
+
+               Rules for inline comments:
+               - `path` must match a file in the PR diff exactly.
+               - `line` must be a line that appears in the diff hunk on the
+                 chosen `side` (`RIGHT` for added/context lines on the new
+                 file, `LEFT` for removed lines on the old file). Posting on
+                 a line outside the diff will fail the whole review — re-read
+                 the diff hunks if unsure.
+               - Anchor every finding to the specific line(s) it concerns.
+                 Put only the cross-cutting summary in the top-level `body`.
+               - If there are no material issues, submit the review with
+                 `"comments": []` and a short body like
+                 `"LGTM — no blocking issues"` so it is visible the review ran.
+
+               If the `gh api` call fails (e.g. invalid line position), read
+               the error, fix the offending comment entry, and retry the
+               same call. Do NOT fall back to `gh pr review --comment`; the
+               inline review is the required output.
 
             Be concise. Skip nits unless they materially affect readability
             or correctness.
@@ -71,11 +105,14 @@ jobs:
           # also surface comments.
           reviews=$(gh api "repos/$REPO/pulls/$PR/reviews" \
             --jq "[.[] | select(.submitted_at >= \"$STARTED\")] | length")
+          inline=$(gh api "repos/$REPO/pulls/$PR/comments" \
+            --jq "[.[] | select(.created_at >= \"$STARTED\")] | length")
           comments=$(gh api "repos/$REPO/issues/$PR/comments" \
             --jq "[.[] | select(.created_at >= \"$STARTED\") | select(.user.login != \"coderabbitai[bot]\")] | length")
           echo "New reviews since $STARTED: $reviews"
-          echo "New comments since $STARTED: $comments"
-          if [ "$reviews" -gt 0 ] || [ "$comments" -gt 0 ]; then
+          echo "New inline review comments since $STARTED: $inline"
+          echo "New issue comments since $STARTED: $comments"
+          if [ "$reviews" -gt 0 ] || [ "$inline" -gt 0 ] || [ "$comments" -gt 0 ]; then
             echo "Claude posted output — verification passed."
             exit 0
           fi
