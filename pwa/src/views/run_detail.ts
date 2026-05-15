@@ -1,4 +1,5 @@
 import { api, type DigestItem, type RunDetail, type ToolCallEntry } from "../api";
+import { prettyToolName } from "../tool-names";
 import { renderPageHeader, renderTabBar } from "./_toolbar";
 
 export async function renderRunDetail(params: Record<string, string>): Promise<HTMLElement> {
@@ -285,7 +286,7 @@ function renderEvent(entry: ToolCallEntry): HTMLElement {
   const toolLine = document.createElement("div");
   toolLine.className = "run-event-tool";
   const toolName = document.createElement("span");
-  toolName.textContent = entry.tool;
+  toolName.textContent = prettyToolName(entry.tool);
   toolLine.appendChild(toolName);
 
   const argsStr = condensedArgs(entry.args);

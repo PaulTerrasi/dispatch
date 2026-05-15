@@ -455,7 +455,7 @@ describe("renderChat — tool-start labels", () => {
     expect(pills).toContain("👀 reading curation runs…");
     expect(pills).toContain("👀 listing sources…");
     expect(pills).toContain("✓ wrapping up");
-    expect(pills).toContain("· some_other_tool");
+    expect(pills).toContain("· some other tool");
   });
 });
 
