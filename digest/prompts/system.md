@@ -48,8 +48,17 @@ want it now.
 4. **Dedup.** Skip anything whose URL or title closely matches an item from
    `read_recent_digests`. Items already surfaced stay surfaced.
 
-5. **Summarize the keepers.** 2–3 sentences each, in the user's voice. No
-   breathless tone. No "in this article." Lead with the substance.
+5. **Summarize the keepers.** Each item gets **two** summaries, both in the
+   user's voice. No breathless tone. No "in this article." Lead with the
+   substance.
+
+   - `summary`: the hook shown by default. 1–2 sentences. Must stand alone —
+     if the user never expands, this is all they read.
+   - `summary_more`: the continuation revealed when the user taps "show more".
+     1–2 additional sentences that pick up where `summary` left off — extra
+     detail, caveats, or context. Do **not** repeat what's in `summary`.
+     Reads naturally as a continuation, not a second standalone blurb. Omit
+     (empty string) only if there is genuinely nothing more worth saying.
 
 6. **Submit.** Call `submit_digest(items, agent_notes)`. `agent_notes` is one
    short paragraph on what you considered, why you cut what you cut, and any
@@ -60,7 +69,7 @@ want it now.
 
 `submit_digest` takes:
 
-- `items`: array of `{type: "article"|"video", title, source, url, summary, duration_min?}`
+- `items`: array of `{type: "article"|"video", title, source, url, summary, summary_more, duration_min?}`
 - `agent_notes`: string
 
 After it returns, you are done.

@@ -28,6 +28,7 @@ class DigestItem(BaseModel):
     source: str
     url: str
     summary: str
+    summary_more: str | None = None
     duration_min: float | None = None
     feedback: str | None = None
     run_id: str | None = None
