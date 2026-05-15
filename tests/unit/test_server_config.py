@@ -4,6 +4,7 @@ SSM env-var resolution.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -96,8 +97,6 @@ def test_resolve_ssm_env_vars_replaces_path_with_secure_value(
     monkeypatch.setattr(config, "_read_ssm", _fake_read)
     config.resolve_ssm_env_vars()
 
-    import os
-
     assert os.environ["CLAUDE_CODE_OAUTH_TOKEN"] == "resolved-claude-oauth-token"
     # Literal value (does not start with '/') should not be rewritten.
     assert os.environ["MORNING_DIGEST_AUTH_TOKEN"] == "literal-not-ssm"
@@ -126,8 +125,6 @@ def test_resolve_ssm_env_vars_resolves_optional_nyt_cookies(
     monkeypatch.setattr(config, "_read_ssm", lambda _name: "NYT-S=abc; foo=bar")
     config.resolve_ssm_env_vars()
 
-    import os
-
     assert os.environ["NYT_COOKIES"] == "NYT-S=abc; foo=bar"
 
 
@@ -145,8 +142,6 @@ def test_resolve_ssm_env_vars_tolerates_missing_nyt_cookies_param(
 
     monkeypatch.setattr(config, "_read_ssm", _boom)
     config.resolve_ssm_env_vars()  # must not raise
-
-    import os
 
     assert os.environ["NYT_COOKIES"] == ""
 

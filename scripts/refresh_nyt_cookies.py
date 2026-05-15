@@ -80,6 +80,11 @@ def extract_nyt_cookies(browser: str | None) -> str:
             if "nytimes.com" in (c.domain or "") and c.value is not None
         ]
         if pairs:
+            # Sort by name: browser-cookie3 reads from SQLite without an
+            # ORDER BY, so row order can change between invocations. A stable
+            # sort here makes the SSM equality check meaningful — otherwise
+            # we'd write a "new" value to SSM every run.
+            pairs.sort(key=lambda p: p[0])
             log.info("found %d NYT cookies in %s", len(pairs), name)
             return "; ".join(f"{n}={v}" for n, v in pairs)
         log.debug("no NYT cookies in %s profile", name)
