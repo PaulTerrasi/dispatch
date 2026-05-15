@@ -401,7 +401,8 @@ export async function renderChat(): Promise<HTMLElement> {
         ) as HTMLElement | null;
         if (body) body.textContent = currentReasoningItem.text;
         currentReasoningEl!.scrollIntoView({ block: "end" });
-        persistItems(items);
+        // No persist: reasoning is filtered out of localStorage anyway, and
+        // the next text/tool event (or onDone) will flush the real state.
       },
       onToolStart: (tool) => {
         finalizeAssistant();
