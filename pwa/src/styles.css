@@ -62,10 +62,27 @@ body {
   background: var(--paper);
   color: var(--ink);
   min-height: 100vh;
+  /* Stop the iOS rubber-band on the root from dragging the layout while the
+     on-screen keyboard is animating in. Per-element scroll containers still
+     bounce normally. */
+  overscroll-behavior-y: none;
 }
 
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+/* Hide native scrollbars everywhere — content still scrolls, just without the
+   visible track. Removes the brief scrollbar flash Safari paints while the
+   viewport resizes around the keyboard, and the persistent bar on Windows /
+   Chrome when content overflows by a line or two. */
+html {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 main {
@@ -637,11 +654,16 @@ body.chat-page .tabbar {
 /* Chat-page full-viewport layout (resizable split) */
 body.chat-page {
   overflow: hidden;
+  height: var(--viewport-h, 100dvh);
 }
 body.chat-page main {
   max-width: none;
   padding: 0;
-  height: 100dvh;
+  /* `--viewport-h` is kept in sync with VisualViewport.height (see main.ts),
+     so the chat layout shrinks when the on-screen keyboard appears and the
+     input bar stays anchored just above it. Falls back to 100dvh on browsers
+     that don't run the JS or don't expose VisualViewport. */
+  height: var(--viewport-h, 100dvh);
   display: flex;
   flex-direction: column;
 }
