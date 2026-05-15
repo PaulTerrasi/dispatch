@@ -72,7 +72,6 @@ async def test_runner_writes_digest_and_commits(
     )
 
     curation = [
-        ("read_profile", {}),
         ("list_sources", {}),
         (
             "submit_digest",
@@ -132,7 +131,7 @@ async def test_quiet_morning_writes_empty_digest(
 
     runner = TwoPhaseScriptedRunner(
         get_state=lambda: captured_state["state"],
-        curation=[("read_profile", {})],
+        curation=[("list_sources", {})],
         reflection=[("end_reflection", {"notes": "everything was a rehash today."})],
     )
     summary = await run_once(data_dir=tmp_data_dir, runner=runner, today=date(2026, 4, 29))
@@ -526,6 +525,40 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_read_triggering_curation_run_uses_top_level_snapshot(
+    tmp_data_dir: Path,
+) -> None:
+    """New curation runs store profile_snapshot at the top level of the run
+    record (since the read_profile tool was removed from curation). The
+    reflection lookup should prefer that over scanning tool_log."""
+    from digest.agent import RunState, build_reflection_tools
+
+    store = Store(tmp_data_dir)
+    store.ensure_layout()
+    store.append_run(
+        {
+            "run_id": "cur2",
+            "kind": "curation",
+            "started_at": "2026-05-10T08:00:00+00:00",
+            "submitted_item_ids": ["xyz98765"],
+            "profile_snapshot": "# Profile\n- top-level snapshot path\n",
+            "tool_log": [],
+        }
+    )
+    state = RunState(store=store, today=date(2026, 5, 10))
+    state.triggering_event = {
+        "ts": "2026-05-10T11:00:00+00:00",
+        "kind": "thumb",
+        "value": "down",
+        "item_id": "xyz98765",
+    }
+    build_reflection_tools(state)
+    result = await state.current_tools["read_triggering_curation_run"]({})
+    text = result["content"][0]["text"]
+    assert "top-level snapshot path" in text
+
+
+@pytest.mark.asyncio
 async def test_read_triggering_curation_run_legacy_run_without_snapshot(
     tmp_data_dir: Path,
 ) -> None:
@@ -643,23 +676,26 @@ async def test_write_reflection_memory_rejects_oversize(tmp_data_dir: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_curation_read_profile_captures_snapshot(
-    tmp_data_dir: Path,
+async def test_curation_run_record_includes_profile_snapshot(
+    tmp_data_dir: Path, captured_state: dict[str, RunState | None]
 ) -> None:
-    """A curation run's read_profile tool_log entry includes the full profile
-    text so a later reflection can quote it back via read_triggering_curation_run."""
-    from digest.agent import RunState, build_curation_tools
-
+    """The persisted curation run record carries the profile snapshot that was
+    baked into the system prompt, so a later reflection can quote it back via
+    read_triggering_curation_run."""
     store = Store(tmp_data_dir)
     store.ensure_layout()
     store.write_profile("# Profile\n- woodworking, LLMs\n")
-    state = RunState(store=store, today=date(2026, 5, 10))
-    build_curation_tools(state)
 
-    await state.current_tools["read_profile"]({})
-    entry = state.tool_log[-1]
-    assert entry["tool"] == "read_profile"
-    assert entry.get("profile_snapshot", "").startswith("# Profile")
+    runner = TwoPhaseScriptedRunner(
+        get_state=lambda: captured_state["state"],
+        curation=[("list_sources", {})],
+        reflection=[("end_reflection", {"notes": "ok"})],
+    )
+    await run_once(data_dir=tmp_data_dir, runner=runner, today=date(2026, 5, 10))
+    runs = [r for r in store.read_recent_runs(days=1) if r["kind"] == "curation"]
+    assert len(runs) == 1
+    snapshot = runs[0].get("profile_snapshot")
+    assert isinstance(snapshot, str) and snapshot.startswith("# Profile")
 
 
 @pytest.mark.asyncio
