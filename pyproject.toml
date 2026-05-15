@@ -94,12 +94,13 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
-    # One-liner Protocol/ABC method stubs — no executable body. Restricted
-    # to indented (≥4 spaces) defs so a module-level placeholder like
-    # `def todo() -> X: ...` is NOT silently excluded — that would defeat
-    # the 100% gate. All real abstract stubs in this codebase live inside
-    # a class (Protocol or ABC), which guarantees ≥4-space indentation.
-    "^\\s*\\.\\.\\.$",
+    # One-liner Protocol/ABC method stubs — no executable body. Both
+    # patterns require ≥4 spaces of indentation so a module-level
+    # placeholder like `def todo() -> X: ...` (or a stray bare `...`) is
+    # NOT silently excluded — that would defeat the 100% gate. All real
+    # abstract stubs in this codebase live inside a class (Protocol or
+    # ABC), which guarantees the indentation.
+    "^ {4,}\\.\\.\\.$",
     "^ {4,}def .*\\) -> .*: \\.\\.\\.$",
 ]
 partial_branches = [
