@@ -114,11 +114,15 @@ export async function renderChat(): Promise<HTMLElement> {
   layout.appendChild(profilePanel);
 
   // ── Collapse / expand profile panel ─────────────────────────────────────
-  const setCollapsed = (collapsed: boolean): void => {
+  const setCollapsed = (collapsed: boolean, returnFocus = false): void => {
     layout.classList.toggle("profile-collapsed", collapsed);
     profileToggleBtn.setAttribute("aria-expanded", String(!collapsed));
     profileToggleBtn.title = collapsed ? "Show profile.md" : "Hide profile.md";
     profileToggleBtn.classList.toggle("is-active", !collapsed);
+    // When the drawer hides, the close button it owned slides off-screen —
+    // bounce focus back to the visible toolbar control so keyboard users
+    // don't get stranded.
+    if (collapsed && returnFocus) profileToggleBtn.focus();
     try {
       localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
     } catch {
@@ -132,8 +136,8 @@ export async function renderChat(): Promise<HTMLElement> {
   profileToggleBtn.addEventListener("click", () => {
     setCollapsed(!layout.classList.contains("profile-collapsed"));
   });
-  profileClose.addEventListener("click", () => setCollapsed(true));
-  backdrop.addEventListener("click", () => setCollapsed(true));
+  profileClose.addEventListener("click", () => setCollapsed(true, true));
+  backdrop.addEventListener("click", () => setCollapsed(true, true));
 
   const refreshProfile = async (): Promise<void> => {
     try {
