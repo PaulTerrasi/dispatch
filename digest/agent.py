@@ -886,4 +886,5 @@ def chat_options(
         max_turns=max_turns,
         permission_mode="bypassPermissions",
         include_partial_messages=True,
+        thinking={"type": "adaptive"},
     )

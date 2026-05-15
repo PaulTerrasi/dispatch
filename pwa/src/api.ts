@@ -84,8 +84,9 @@ export const api = {
 
 export interface ChatStreamHandlers {
   onText?: (delta: string) => void;
+  onReasoning?: (delta: string) => void;
   onToolStart?: (tool: { id: string; name: string; input: unknown }) => void;
-  onToolEnd?: (tool: { tool_use_id: string; ok: boolean }) => void;
+  onToolEnd?: (tool: { tool_use_id: string; ok: boolean; output?: string }) => void;
   onProfileChanged?: (by: string) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -174,11 +175,14 @@ function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers): void {
     case "text":
       handlers.onText?.((data as { delta: string }).delta);
       break;
+    case "reasoning":
+      handlers.onReasoning?.((data as { delta: string }).delta);
+      break;
     case "tool_start":
       handlers.onToolStart?.(data as { id: string; name: string; input: unknown });
       break;
     case "tool_end":
-      handlers.onToolEnd?.(data as { tool_use_id: string; ok: boolean });
+      handlers.onToolEnd?.(data as { tool_use_id: string; ok: boolean; output?: string });
       break;
     case "profile_changed":
       handlers.onProfileChanged?.((data as { by: string }).by);
