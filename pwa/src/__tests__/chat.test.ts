@@ -76,21 +76,32 @@ describe("renderChat — layout + lifecycle", () => {
     );
   });
 
-  it("clicking the profile header toggles its collapsed state and persists", async () => {
+  it("clicking the toolbar profile button toggles its collapsed state and persists", async () => {
     stubProfileFetch();
     const el = await renderChat();
     document.body.appendChild(el);
     const layout = document.querySelector(".chat-layout") as HTMLElement;
-    const header = document.querySelector(".chat-profile-header") as HTMLButtonElement;
+    const btn = document.querySelector(".chat-profile-btn") as HTMLButtonElement;
 
     // Default: collapsed.
     expect(layout.classList.contains("profile-collapsed")).toBe(true);
-    header.click();
+    btn.click();
     expect(layout.classList.contains("profile-collapsed")).toBe(false);
     expect(localStorage.getItem(COLLAPSED_KEY)).toBe("0");
-    header.click();
+    btn.click();
     expect(layout.classList.contains("profile-collapsed")).toBe(true);
     expect(localStorage.getItem(COLLAPSED_KEY)).toBe("1");
+  });
+
+  it("clicking the in-drawer close button collapses the profile panel", async () => {
+    stubProfileFetch();
+    localStorage.setItem(COLLAPSED_KEY, "0");
+    const el = await renderChat();
+    document.body.appendChild(el);
+    const layout = document.querySelector(".chat-layout") as HTMLElement;
+    expect(layout.classList.contains("profile-collapsed")).toBe(false);
+    (document.querySelector(".chat-profile-close") as HTMLElement).click();
+    expect(layout.classList.contains("profile-collapsed")).toBe(true);
   });
 
   it("clicking the backdrop collapses the profile panel", async () => {
@@ -571,7 +582,7 @@ describe("renderChat — tool-start labels", () => {
     expect(labels).toContain("reading curation runs");
     expect(labels).toContain("listing sources");
     expect(labels).toContain("wrapping up");
-    expect(labels).toContain("some_other_tool");
+    expect(labels).toContain("some other tool");
     expect(labels).toContain("tool call");
   });
 });

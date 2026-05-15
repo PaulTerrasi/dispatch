@@ -492,33 +492,9 @@ def test_chat_options_uses_partial_messages(store: Store) -> None:
     q: asyncio.Queue[str] = asyncio.Queue()
     opts = chat_options(state, q)
     assert opts.include_partial_messages is True
-    # talk also has a stderr forwarder.
-    assert callable(opts.stderr)
-
-
-def test_chat_options_stderr_forwarder_invokes_logger(store: Store) -> None:
-    """The stderr callback must invoke the structlog logger so SDK errors aren't
-    silent. We spy on the module-level `log.warning` to avoid coupling to the
-    structlog<->stdlib bridge implementation."""
-    from digest import agent as agent_mod
-
-    state = _state(store)
-    q: asyncio.Queue[str] = asyncio.Queue()
-    opts = chat_options(state, q)
-    calls: list[tuple[str, dict[str, Any]]] = []
-
-    def _spy_warning(event: str, **kwargs: Any) -> None:
-        calls.append((event, kwargs))
-
-    original = agent_mod.log.warning
-    agent_mod.log.warning = _spy_warning  # type: ignore[method-assign]
-    try:
-        assert opts.stderr is not None
-        opts.stderr("CLI: something happened")
-    finally:
-        agent_mod.log.warning = original  # type: ignore[method-assign]
-
-    assert calls == [("claude_cli.stderr", {"line": "CLI: something happened"})]
+    # The stderr callback is installed by routes_chat per request so it can
+    # buffer the lines for the failure SSE; chat_options must leave it unset.
+    assert opts.stderr is None
 
 
 # ── Chat tools: lock wrapping for the write toolkit ────────────────────────

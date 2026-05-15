@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import shutil
+from collections import deque
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -42,6 +43,10 @@ StoreDep = Annotated[StoreProtocol, Depends(get_store)]
 
 HEARTBEAT_INTERVAL_SECONDS = 10.0
 AGENT_WALL_TIMEOUT_SECONDS = 240.0
+# The SDK cancels its stderr reader during disconnect, so a placeholder
+# "Check stderr output for details" is the only thing surfaced on a CLI
+# crash unless we buffer the lines ourselves.
+CLI_STDERR_BUFFER_LINES = 50
 
 
 class ChatTurn(BaseModel):
@@ -169,6 +174,13 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
     state = RunState(store=store, today=datetime.now(UTC).date())
     profile_changed_q: asyncio.Queue[str] = asyncio.Queue()
     options = chat_options(state, profile_changed_q)
+    cli_stderr_buffer: deque[str] = deque(maxlen=CLI_STDERR_BUFFER_LINES)
+
+    def _capture_stderr(line: str) -> None:
+        cli_stderr_buffer.append(line)
+        log.warning("claude_cli.stderr", line=line)
+
+    options.stderr = _capture_stderr
     runner = SdkAgentRunner()
 
     prompt = (
@@ -219,20 +231,28 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
                     },
                 )
             )
-        except Exception as e:  # pragma: no cover — surfaced to client
+        except Exception as e:
             exit_code = getattr(e, "exit_code", None)
             cli_stderr = getattr(e, "stderr", None)
+            buffered_stderr = "\n".join(cli_stderr_buffer) if cli_stderr_buffer else None
             log.exception(
                 "chat.agent_failed",
                 error_type=type(e).__name__,
                 exit_code=exit_code,
                 cli_stderr=cli_stderr,
+                cli_stderr_buffered=buffered_stderr,
             )
             payload: dict[str, Any] = {"message": str(e)}
             if exit_code is not None:
                 payload["exit_code"] = exit_code
             if cli_stderr:
                 payload["cli_stderr"] = cli_stderr
+            if buffered_stderr:
+                # Forwarded to the browser intentionally: single-tenant
+                # personal app, the buffered lines are what makes the failure
+                # actionable for the user. Revisit if this ever becomes
+                # multi-tenant or the CLI starts emitting credential fragments.
+                payload["cli_stderr_buffered"] = buffered_stderr
             await out_queue.put(_sse("error", payload))
         finally:
             await out_queue.put(None)

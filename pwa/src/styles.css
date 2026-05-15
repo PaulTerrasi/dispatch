@@ -369,12 +369,8 @@ body.chat-page .tabbar {
 .item .summary .summary-text {
   margin: 0;
 }
-.item .summary.is-clamped .summary-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.item .summary .summary-more {
+  margin: 6px 0 0 0;
 }
 .item .summary-toggle {
   margin-top: 6px;
@@ -735,48 +731,65 @@ body.chat-page .toolbar strong {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--muted);
-  padding: 12px 16px 8px;
+  padding: 12px 12px 10px 16px;
   border-bottom: 1px solid var(--rule);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  background: transparent;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  border-radius: 0;
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
   font-weight: 600;
 }
-.chat-profile-header:hover {
-  color: var(--ink);
-}
-.chat-profile-toggle {
-  font-size: 1rem;
-  line-height: 1;
+.chat-profile-close {
+  background: transparent;
+  border: none;
   color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.chat-profile-close:hover {
+  color: var(--ink);
+  background: var(--paper);
 }
 
-/* Collapsed: slide the drawer off-screen, leave a 28px handle (the header) peeking out. */
+/* Collapsed: fully slide the drawer off-screen. */
 .chat-layout.profile-collapsed .chat-profile {
-  transform: translateX(calc(-100% + 28px));
+  transform: translateX(-100%);
   box-shadow: none;
 }
-.chat-layout.profile-collapsed .chat-profile-body {
-  visibility: hidden;
+
+/* Toolbar profile.md pill (opens/closes the drawer). */
+.chat-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
-.chat-layout.profile-collapsed .chat-profile-header {
-  flex: 1;
-  justify-content: center;
-  padding: 10px 0;
-  border-bottom: none;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  gap: 10px;
-  align-self: stretch;
+.chat-profile-btn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.chat-profile-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-2);
+}
+.chat-profile-btn.is-active {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 .chat-profile-body {
   flex: 1;

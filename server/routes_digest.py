@@ -28,6 +28,7 @@ class DigestItem(BaseModel):
     source: str
     url: str
     summary: str
+    summary_more: str | None = None
     duration_min: float | None = None
     feedback: str | None = None
     run_id: str | None = None
@@ -174,8 +175,13 @@ def search(store: StoreDep, q: str) -> list[SearchHit]:
     for d in store.list_digests():
         data = store.read_digest(d) or {}
         for item in data.get("items", []) or []:
-            blob = (
-                item.get("title", "") + " " + item.get("summary", "") + " " + item.get("source", "")
+            blob = " ".join(
+                [
+                    item.get("title", "") or "",
+                    item.get("summary", "") or "",
+                    item.get("summary_more", "") or "",
+                    item.get("source", "") or "",
+                ]
             ).lower()
             if needle in blob:
                 snippet = item.get("summary", "")[:160]

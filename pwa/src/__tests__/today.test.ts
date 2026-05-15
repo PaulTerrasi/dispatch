@@ -54,6 +54,7 @@ const FEED_SEED: FeedItem[] = [
     source: "Example",
     url: "https://example.com/new-1",
     summary: "From today.",
+    summary_more: "Plus a continuation worth expanding for.",
     feedback: null,
     digest_date: "2026-04-29",
     run_id: "run00429",
@@ -269,21 +270,37 @@ describe("renderToday (feed)", () => {
     expect(document.body.textContent).toContain("12 min");
   });
 
-  it("summary 'show more' toggle expands then collapses the body text", async () => {
+  it("summary 'show more' toggle reveals then hides the continuation", async () => {
     vi.stubGlobal(
       "fetch",
       mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": FEED_SEED }),
     );
     const el = await renderToday();
     document.body.appendChild(el);
-    const wrap = document.querySelector(".summary") as HTMLElement;
+    const wrap = document.querySelector(".summary:has(.summary-more)") as HTMLElement;
+    const cont = wrap.querySelector(".summary-more") as HTMLElement;
     const toggle = wrap.querySelector(".summary-toggle") as HTMLButtonElement;
+    expect(cont.hidden).toBe(true);
     toggle.click();
-    expect(wrap.classList.contains("is-expanded")).toBe(true);
+    expect(cont.hidden).toBe(false);
     expect(toggle.textContent).toBe("show less");
     toggle.click();
-    expect(wrap.classList.contains("is-expanded")).toBe(false);
+    expect(cont.hidden).toBe(true);
     expect(toggle.textContent).toBe("show more");
+  });
+
+  it("omits the show-more toggle when the agent did not provide a continuation", async () => {
+    const seed = structuredClone(FEED_SEED).slice(0, 1);
+    seed[0].summary_more = null;
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+    const wrap = document.querySelector(".summary") as HTMLElement;
+    expect(wrap.querySelector(".summary-toggle")).toBeNull();
+    expect(wrap.querySelector(".summary-more")).toBeNull();
   });
 
   it("toggling thumbs-down off (down→none) clears the notes field, no fade", async () => {

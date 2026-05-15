@@ -429,7 +429,7 @@ def test_talk_emits_profile_changed_event_on_successful_write(
             # Yield a no-op message so the generator drains.
             await asyncio.sleep(0)
             return
-            yield  # pragma: no cover -- makes this an async generator
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _PushRunner())
 
@@ -460,7 +460,7 @@ def test_talk_emits_heartbeat_when_agent_is_slow(
             del prompt, options
             await asyncio.sleep(0.1)  # idle long enough for heartbeats to fire
             return
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _SlowRunner())
 
@@ -490,7 +490,7 @@ def test_talk_emits_error_frame_on_agent_timeout(
 
             await asyncio.sleep(2.0)  # exceeds the 0.05s wall time
             return
-            yield  # pragma: no cover
+            yield  # pragma: no cover -- makes this method an async generator
 
     monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _HangRunner())
 
@@ -504,3 +504,75 @@ def test_talk_emits_error_frame_on_agent_timeout(
             body += chunk
     assert b"event: error" in body
     assert b"timeout" in body
+
+
+def test_talk_surfaces_buffered_cli_stderr_on_crash(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the SDK runner crashes, lines the CLI wrote to stderr (captured
+    via options.stderr) must reach the SSE error frame so we can diagnose
+    silent CLI exits in production."""
+    import server.routes_chat as rt
+
+    class _SimulatedProcessError(Exception):
+        def __init__(self, msg: str) -> None:
+            super().__init__(msg)
+            self.exit_code = 1
+            self.stderr = "Check stderr output for details"
+
+    class _CrashAfterStderrRunner:
+        async def run(self, prompt, options):
+            options.stderr("npm error: ENOSPC: no space left on device")
+            options.stderr("Error: spawn EACCES")
+            raise _SimulatedProcessError("Command failed with exit code 1")
+            yield  # pragma: no cover -- makes this method an async generator
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _CrashAfterStderrRunner())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    assert b"event: error" in body
+    # Find the error frame and decode the data payload.
+    error_line = next(line for line in body.split(b"\n\n") if line.startswith(b"event: error"))
+    data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
+    payload = json.loads(data_line[len(b"data: ") :])
+    assert "ENOSPC" in payload["cli_stderr_buffered"]
+    assert "EACCES" in payload["cli_stderr_buffered"]
+    assert payload["exit_code"] == 1
+    assert payload["cli_stderr"] == "Check stderr output for details"
+
+
+def test_talk_error_frame_omits_optional_fields_when_unavailable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plain exception with no exit_code/stderr/buffered lines yields an
+    error frame whose payload contains only `message`."""
+    import server.routes_chat as rt
+
+    class _PlainCrashRunner:
+        async def run(self, prompt, options):
+            raise Exception("kaboom")
+            yield  # pragma: no cover -- makes this method an async generator
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _PlainCrashRunner())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    error_line = next(line for line in body.split(b"\n\n") if line.startswith(b"event: error"))
+    data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
+    payload = json.loads(data_line[len(b"data: ") :])
+    assert payload == {"message": "kaboom"}
