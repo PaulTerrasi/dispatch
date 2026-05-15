@@ -476,7 +476,14 @@ def test_reflection_cursor_non_string_ts_returns_none(store: S3Store) -> None:
 
 
 class _FakeS3:
-    """Minimal in-memory S3 that supports IfNoneMatch/IfMatch — moto does not."""
+    """Minimal in-memory S3 that supports IfNoneMatch/IfMatch — moto does not.
+
+    Single-threaded only: the conditional-put implementation is a non-atomic
+    check-then-write. That's fine for the synchronous test cases in this
+    file, but don't reuse this fake from concurrent test contexts (e.g.
+    asyncio.gather lock-contention scenarios) — race the precondition check
+    against another put and it'll mis-classify a real conflict as success.
+    """
 
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str]] = {}  # key -> (body, etag)

@@ -11,7 +11,7 @@ import pytest
 from digest.store import Store
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _isolate_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make `git commit` in tests independent of the user's global gitconfig.
 
@@ -20,6 +20,10 @@ def _isolate_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
     in tests crash. Pointing GIT_CONFIG_GLOBAL/SYSTEM at /dev/null gives every
     test an empty global config; the local-repo identity that
     Store.git_init_if_needed() writes is then enough.
+
+    Pulled in transitively via `tmp_data_dir` so tests that build a Store get
+    it for free; pure unit tests (RSS, patch, YouTube, etc.) skip the env
+    patching entirely.
     """
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
@@ -27,7 +31,7 @@ def _isolate_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def tmp_data_dir(tmp_path: Path) -> Iterator[Path]:
+def tmp_data_dir(tmp_path: Path, _isolate_git_env: None) -> Iterator[Path]:
     d = tmp_path / "data"
     d.mkdir()
     yield d
