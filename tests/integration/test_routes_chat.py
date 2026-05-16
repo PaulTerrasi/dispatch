@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
+    ResultMessage,
     StreamEvent,
     TextBlock,
     ToolResultBlock,
@@ -28,6 +29,18 @@ from digest.agent import RunState, build_chat_tools
 from digest.store import Store
 from server.app import create_app
 from server.routes_chat import _sse, _summarize_message, _translate
+
+
+def _result(is_error: bool = False) -> ResultMessage:
+    """Build a minimally-populated ResultMessage for tests."""
+    return ResultMessage(
+        subtype="error" if is_error else "success",
+        duration_ms=1,
+        duration_api_ms=1,
+        is_error=is_error,
+        num_turns=1,
+        session_id="s",
+    )
 
 
 @pytest.fixture
@@ -676,3 +689,63 @@ def test_talk_surfaces_recent_cli_messages_on_crash(
             "tool_results": [{"tool_use_id": "t1", "is_error": False}],
         },
     ]
+
+
+def test_talk_suppresses_post_result_cli_exit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Known CLI bug: after emitting a successful ResultMessage the Node
+    subprocess sometimes exits with code 1. The conversation completed
+    cleanly, so we must swallow that exit and finish with a `done` frame
+    rather than surfacing a spurious `error` frame to the user."""
+    import server.routes_chat as rt
+
+    class _ExitAfterResult:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield _result(is_error=False)
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _ExitAfterResult())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    assert b"event: error" not in body
+    assert b"event: done" in body
+
+
+def test_talk_does_not_suppress_when_result_is_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ResultMessage with is_error=True is a real failure signal from the
+    agent — don't latch the suppression flag on it."""
+    import server.routes_chat as rt
+
+    class _ErrResultThenCrash:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield _result(is_error=True)
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _ErrResultThenCrash())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    assert b"event: error" in body
+    # Pin the contract: the suppression flag must NOT latch on an error-result,
+    # so we never emit a spurious `done` frame after the error.
+    assert b"event: done" not in body

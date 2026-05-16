@@ -24,6 +24,7 @@ from typing import Annotated, Any
 import structlog
 from claude_agent_sdk import (
     AssistantMessage,
+    ResultMessage,
     StreamEvent,
     ToolResultBlock,
     ToolUseBlock,
@@ -248,11 +249,20 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
         except asyncio.CancelledError:
             pass
 
+    # Mutable so the closures + the error handler can share it.
+    state_flags = {"result_seen": False}
+
     async def _drive_agent() -> None:
         async for msg in runner.run(prompt=prompt, options=options):
             summary = _summarize_message(msg)
             if summary is not None:
                 cli_messages_buffer.append(summary)
+            if isinstance(msg, ResultMessage) and not msg.is_error:
+                # The agent has signalled turn completion. Anything the CLI
+                # does after this point (including its observed habit of
+                # exiting with code 1 post-completion) is irrelevant — the
+                # user already got the full response.
+                state_flags["result_seen"] = True
             for chunk in _translate(msg):
                 await out_queue.put(chunk)
         await out_queue.put(_sse("done", {}))
@@ -276,6 +286,24 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
                 )
             )
         except Exception as e:
+            if state_flags["result_seen"]:
+                # Intentionally broad: ANY exception after a successful
+                # ResultMessage is swallowed. The motivating case is the
+                # Node CLI's habit of exiting with code 1 post-completion
+                # (surfacing as `Command failed with exit code 1`), but
+                # this also covers future cleanup/generator-shutdown bugs
+                # in the same window. Trade-off: a regression introduced
+                # in that window would present as a clean `done` instead
+                # of a user-visible error. The info log below keeps it
+                # observable in CloudWatch — don't narrow this catch
+                # without first checking those entries.
+                log.info(
+                    "chat.post_result_cli_exit_suppressed",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                )
+                await out_queue.put(_sse("done", {}))
+                return
             exit_code = getattr(e, "exit_code", None)
             cli_stderr = getattr(e, "stderr", None)
             buffered_stderr = "\n".join(cli_stderr_buffer) if cli_stderr_buffer else None
