@@ -342,6 +342,17 @@ def test_summarize_stream_event_without_delta_block() -> None:
     assert _summarize_message(msg) == {
         "type": "StreamEvent",
         "event_type": "message_start",
+        "delta_type": None,
+    }
+
+
+def test_summarize_stream_event_with_non_dict_delta() -> None:
+    """If the SDK ever returns a non-dict delta we still produce a summary."""
+    msg = StreamEvent(uuid="u", session_id="s", event={"type": "x", "delta": "raw"})
+    assert _summarize_message(msg) == {
+        "type": "StreamEvent",
+        "event_type": "x",
+        "delta_type": None,
     }
 
 

@@ -123,11 +123,14 @@ def _summarize_message(msg: Any) -> dict[str, Any]:
     """
     if isinstance(msg, StreamEvent):
         ev = msg.event or {}
-        out: dict[str, Any] = {"type": "StreamEvent", "event_type": ev.get("type")}
-        delta = ev.get("delta")
-        if isinstance(delta, dict):
-            out["delta_type"] = delta.get("type")
-        return out
+        delta = ev.get("delta") or {}
+        return {
+            "type": "StreamEvent",
+            "event_type": ev.get("type"),
+            # `delta_type` is None when delta is absent or not a dict — matches
+            # how _translate handles the same field defensively.
+            "delta_type": delta.get("type") if isinstance(delta, dict) else None,
+        }
     if isinstance(msg, AssistantMessage):
         blocks: list[str] = []
         for b in msg.content:
@@ -298,6 +301,9 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
                 # multi-tenant or the CLI starts emitting credential fragments.
                 payload["cli_stderr_buffered"] = buffered_stderr
             if recent_messages:
+                # Forwarded to the browser for the same single-tenant reason
+                # as cli_stderr_buffered above. Summaries are shape-only
+                # (tool names, block types), not raw tool inputs/outputs.
                 payload["cli_recent_messages"] = recent_messages
             await out_queue.put(_sse("error", payload))
         finally:
