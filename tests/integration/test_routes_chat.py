@@ -34,7 +34,7 @@ from server.routes_chat import _sse, _summarize_message, _translate
 def _result(is_error: bool = False) -> ResultMessage:
     """Build a minimally-populated ResultMessage for tests."""
     return ResultMessage(
-        subtype="success",
+        subtype="error" if is_error else "success",
         duration_ms=1,
         duration_api_ms=1,
         is_error=is_error,
@@ -746,3 +746,6 @@ def test_talk_does_not_suppress_when_result_is_error(
             body += chunk
 
     assert b"event: error" in body
+    # Pin the contract: the suppression flag must NOT latch on an error-result,
+    # so we never emit a spurious `done` frame after the error.
+    assert b"event: done" not in body
