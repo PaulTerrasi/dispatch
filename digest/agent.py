@@ -108,13 +108,11 @@ def _stable_id(url: str, title: str) -> str:
 
 
 def _truncate_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Cap the summary on a fetched feed entry before stashing it in `details`.
-    Keeps run records bounded when a feed has long HTML summaries."""
-    out = dict(entry)
-    summary = out.get("summary")
-    if isinstance(summary, str) and len(summary) > 2000:
-        out["summary"] = summary[:2000]
-    return out
+    """Cap any string field on a fetched feed entry before stashing it in
+    `details`. Today only `summary` is large enough to matter, but capping
+    every string value keeps the function correct if `FeedEntry.as_dict()`
+    ever gains a field like `content` or `description`."""
+    return {k: (v[:2_000] if isinstance(v, str) and len(v) > 2_000 else v) for k, v in entry.items()}
 
 
 def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
@@ -245,7 +243,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "web_fetch",
                 {"url": url},
                 f"{len(doc.text)} chars",
-                details={"url": doc.url, "title": doc.title, "text": doc.text[:20_000]},
+                details=dict(payload),
             )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
@@ -417,7 +415,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_digests",
             {"days": days},
             f"{len(items)} items",
-            details={"items": items[:200]},
+            details={
+                "items": [
+                    {k: (v[:2_000] if isinstance(v, str) else v) for k, v in i.items()}
+                    for i in items[:200]
+                ]
+            },
         )
         return {"content": [{"type": "text", "text": text}]}
 
