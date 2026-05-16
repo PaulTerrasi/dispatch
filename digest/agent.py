@@ -108,13 +108,12 @@ def _stable_id(url: str, title: str) -> str:
 
 
 def _truncate_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Cap free-text fields on a fetched feed entry before stashing it in
-    `details`. Keeps run records bounded when a feed has long HTML summaries."""
+    """Cap the summary on a fetched feed entry before stashing it in `details`.
+    Keeps run records bounded when a feed has long HTML summaries."""
     out = dict(entry)
-    for k in ("summary", "description", "content"):
-        v = out.get(k)
-        if isinstance(v, str) and len(v) > 2000:
-            out[k] = v[:2000]
+    summary = out.get("summary")
+    if isinstance(summary, str) and len(summary) > 2000:
+        out["summary"] = summary[:2000]
     return out
 
 
@@ -555,7 +554,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_curation_runs",
             {"days": days},
             f"{len(runs)} runs",
-            details={"text": text, "run_ids": [r.get("run_id") for r in runs]},
+            details={"text": text[:20_000], "run_ids": [r.get("run_id") for r in runs]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -625,8 +624,8 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             f"matched run {match.get('run_id', '?')}",
             details={
                 "matched_run_id": match.get("run_id"),
-                "profile_snapshot": snapshot,
-                "text": text,
+                "profile_snapshot": snapshot[:5_000] if snapshot else snapshot,
+                "text": text[:20_000],
             },
         )
         return {"content": [{"type": "text", "text": text}]}
