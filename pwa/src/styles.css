@@ -655,8 +655,9 @@ body.chat-page {
      the chat appear to scroll off-screen. A fixed body cannot be panned by
      that behavior. */
   position: fixed;
-  /* Only three sides are load-bearing — `height` (below) wins over an
-     implied `bottom: 0`, so spell out the constraints we actually rely on. */
+  /* Pin three sides explicitly; omitting `bottom` (leaving it `auto`) lets
+     the `height` below control the element's size rather than stretching
+     it to fill the viewport. */
   top: 0;
   left: 0;
   right: 0;
