@@ -95,6 +95,31 @@ async def test_curation_fetch_rss_success(store: Store, monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_curation_fetch_rss_truncates_long_summaries_in_details(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Long feed summaries get capped at 2000 chars in the stored details
+    payload so a chatty feed doesn't bloat the run record."""
+    from digest import agent as agent_mod
+    from digest.tools.rss import FeedEntry
+
+    long_summary = "x" * 5000
+
+    async def _fake_rss(url: str, *, limit: int = 25) -> list[FeedEntry]:
+        return [
+            FeedEntry(title="T", url="u", published=None, summary=long_summary, source_title="src")
+        ]
+
+    monkeypatch.setattr(agent_mod, "fetch_rss", _fake_rss)
+    state = _state(store)
+    build_curation_tools(state)
+    await state.current_tools["fetch_rss"]({"url": "https://x"})
+    entry = state.tool_log[-1]
+    stored = entry["details"]["entries"][0]["summary"]
+    assert len(stored) == 2000
+
+
+@pytest.mark.asyncio
 async def test_curation_fetch_rss_error_returns_isError(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -632,6 +657,52 @@ async def test_reflection_read_recent_digests(store: Store) -> None:
     )
     out = await state.current_tools["read_recent_digests"]({"days": 14})
     assert "Title\tsrc.com" in out["content"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_reflection_read_recent_digests_caps_items_at_50(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """details['items'] should be sliced to at most 50 entries even if the
+    store has more, so the run record stays bounded for wide days windows."""
+    fake_items = [
+        {"date": "2026-05-10", "id": str(i), "title": "t", "source": "s", "url": "u"}
+        for i in range(100)
+    ]
+    monkeypatch.setattr(store, "recent_digest_items", lambda *, days: fake_items)
+    state = _state(store)
+    build_reflection_tools(state)
+    await state.current_tools["read_recent_digests"]({"days": 30})
+    entry = state.tool_log[-1]
+    assert len(entry["details"]["items"]) == 50
+
+
+@pytest.mark.asyncio
+async def test_submit_digest_details_strip_internal_fields(store: Store) -> None:
+    """details.items should drop the 'feedback' and 'run_id' bookkeeping keys
+    that the digest store needs but the run-detail view has no use for."""
+    state = _state(store)
+    build_curation_tools(state)
+    await state.current_tools["submit_digest"](
+        {
+            "items": [
+                {
+                    "type": "article",
+                    "title": "T",
+                    "source": "s",
+                    "url": "https://x/a",
+                    "summary": "ok",
+                }
+            ],
+            "agent_notes": "n",
+        }
+    )
+    entry = state.tool_log[-1]
+    item = entry["details"]["items"][0]
+    assert "feedback" not in item
+    assert "run_id" not in item
+    # The non-stripped fields are still there.
+    assert item["title"] == "T"
 
 
 @pytest.mark.asyncio

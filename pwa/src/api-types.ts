@@ -538,6 +538,10 @@ export interface components {
             outcome: string;
             /** Thinking */
             thinking?: string | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ValidationError */
         ValidationError: {

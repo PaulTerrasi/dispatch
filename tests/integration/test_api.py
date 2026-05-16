@@ -478,6 +478,8 @@ def test_get_run_falls_back_to_legacy_embedded_run(client: TestClient, tmp_data_
                     "tool": "read_profile",
                     "args": {},
                     "outcome": "ok",
+                    # Legacy flat profile_snapshot → mapped to details by the API.
+                    "profile_snapshot": "# legacy profile\n",
                 },
                 "garbage-entry-not-a-dict",  # exercises the malformed tool_log branch
             ],
@@ -513,6 +515,8 @@ def test_get_run_falls_back_to_legacy_embedded_run(client: TestClient, tmp_data_
     assert body["agent_notes"]  # carried over from the digest
     # Malformed tool-log entry was logged & skipped; the good one remains.
     assert len(body["tool_log"]) == 1
+    # Legacy flat profile_snapshot was hoisted into the new details field.
+    assert body["tool_log"][0]["details"] == {"profile_snapshot": "# legacy profile\n"}
 
 
 def test_get_run_falls_back_to_legacy_singular_run_key(client: TestClient, tmp_data_dir: Path):

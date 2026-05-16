@@ -349,6 +349,210 @@ describe("renderRunDetail", () => {
     expect(document.body.textContent).toContain("UNK");
   });
 
+  it("renders an expandable details block per tool call when details are present", async () => {
+    stub({
+      "/api/runs/details": {
+        ...CURATION_RUN,
+        run_id: "details",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "12 chars",
+            details: { profile: "# Profile\nHello." },
+          },
+          {
+            ts: "t",
+            tool: "fetch_rss",
+            args: { url: "https://example.com/feed" },
+            outcome: "2 entries",
+            details: {
+              entries: [
+                { title: "Post A", url: "https://example.com/a", source: "Example" },
+                { title: "Post B", url: "https://example.com/b" },
+              ],
+            },
+          },
+          {
+            ts: "t",
+            tool: "submit_digest",
+            args: { count: 1 },
+            outcome: "ok",
+            details: {
+              items: [{ title: "Picked", url: "https://example.com/a" }],
+              agent_notes: "kept one",
+            },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "details" });
+    document.body.appendChild(el);
+    const toggles = document.querySelectorAll(".run-event-details-toggle");
+    expect(toggles.length).toBe(3);
+    // Body starts collapsed.
+    const firstBody = document.querySelector(".run-event-details-body") as HTMLElement;
+    expect(firstBody.classList.contains("collapsed")).toBe(true);
+    (toggles[0] as HTMLButtonElement).click();
+    expect(firstBody.classList.contains("collapsed")).toBe(false);
+    expect(firstBody.textContent).toContain("# Profile");
+    expect((toggles[0] as HTMLButtonElement).textContent).toBe("Hide details");
+    // Toggling back returns to the collapsed state.
+    (toggles[0] as HTMLButtonElement).click();
+    expect(firstBody.classList.contains("collapsed")).toBe(true);
+    expect((toggles[0] as HTMLButtonElement).textContent).toBe("Show details");
+    (toggles[0] as HTMLButtonElement).click();
+    // RSS entries render as a list of titles with linked URLs.
+    (toggles[1] as HTMLButtonElement).click();
+    const rssBody = toggles[1].nextElementSibling as HTMLElement;
+    const links = rssBody.querySelectorAll(".run-event-detail-row-title a");
+    expect(Array.from(links).map((a) => a.textContent)).toEqual(["Post A", "Post B"]);
+    // submit_digest exposes both items and agent_notes sections.
+    (toggles[2] as HTMLButtonElement).click();
+    expect(document.body.textContent).toContain("kept one");
+  });
+
+  it("renders detail values that are arrays of primitives, plain objects, and primitives as JSON", async () => {
+    stub({
+      "/api/runs/shapes": {
+        ...CURATION_RUN,
+        run_id: "shapes",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_recent_curation_runs",
+            args: { days: 7 },
+            outcome: "2 runs",
+            details: {
+              run_ids: ["run-a", "run-b"], // array of strings → JSON pre
+              triggering_event: { kind: "thumb", value: "up" }, // plain object → JSON pre
+              rejected: true, // primitive → stringified
+            },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "shapes" });
+    document.body.appendChild(el);
+    (document.querySelector(".run-event-details-toggle") as HTMLButtonElement).click();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain('"run-a"');
+    expect(text).toContain('"kind": "thumb"');
+    expect(text).toContain("true");
+  });
+
+  it("filters out null/empty detail entries and skips empty details blocks", async () => {
+    stub({
+      "/api/runs/empty-details": {
+        ...CURATION_RUN,
+        run_id: "empty-details",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "ok",
+            // All values filtered out (null, empty string, empty array) → no toggle.
+            details: { profile: null, notes: "", entries: [] },
+          },
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "ok",
+            // Mix of filtered and kept — kept ones still appear.
+            details: { profile: "kept", entries: [], rejected: null },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "empty-details" });
+    document.body.appendChild(el);
+    // Only the second entry has non-empty details, so exactly one toggle exists.
+    const toggles = document.querySelectorAll(".run-event-details-toggle");
+    expect(toggles.length).toBe(1);
+    (toggles[0] as HTMLButtonElement).click();
+    expect(document.body.textContent).toContain("kept");
+  });
+
+  it("skips non-http(s) URLs in detail rows (no javascript: hrefs)", async () => {
+    stub({
+      "/api/runs/xss": {
+        ...CURATION_RUN,
+        run_id: "xss",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "fetch_rss",
+            args: { url: "https://x" },
+            outcome: "2 entries",
+            details: {
+              entries: [
+                { title: "Evil", url: "javascript:alert(1)" },
+                { title: "Plain title only" },
+                { name: "Named thing" },
+                // Rows without title/name fall through to a JSON <pre> so
+                // every field (ts, item_id, kind, value, …) stays visible —
+                // critical for feedback events where the heuristic title/sub
+                // picker would otherwise hide most of the fields.
+                { ts: "2026-05-14", kind: "thumb", value: "up", item_id: "abc" },
+              ],
+              unknown_detail_key: "free-form value",
+            },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "xss" });
+    document.body.appendChild(el);
+    (document.querySelector(".run-event-details-toggle") as HTMLButtonElement).click();
+    // No anchors rendered: the only "URL" was a javascript: scheme, dropped.
+    expect(document.querySelectorAll(".run-event-detail-row-title a").length).toBe(0);
+    // Title-bearing rows show the title text.
+    const titles = document.querySelectorAll(".run-event-detail-row-title");
+    expect(titles[0].textContent).toBe("Evil");
+    expect(titles[1].textContent).toBe("Plain title only");
+    expect(titles[2].textContent).toBe("Named thing");
+    // The title-less row falls through to a JSON <pre> exposing every field.
+    const eventPre = Array.from(document.querySelectorAll(".run-event-detail-pre")).find((n) =>
+      n.textContent?.includes('"item_id": "abc"'),
+    );
+    expect(eventPre).toBeDefined();
+    expect(eventPre!.textContent).toContain('"kind": "thumb"');
+    expect(eventPre!.textContent).toContain('"value": "up"');
+    // Unknown detail key falls through to the key name itself as the label.
+    expect(document.body.textContent).toContain("unknown_detail_key");
+  });
+
+  it("maps legacy flat profile_snapshot into details on the read_profile entry", async () => {
+    stub({
+      "/api/runs/legacy": {
+        ...CURATION_RUN,
+        run_id: "legacy",
+        tool_log: [
+          {
+            ts: "t",
+            tool: "read_profile",
+            args: {},
+            outcome: "10 chars",
+            details: { profile_snapshot: "old profile text" },
+          },
+        ],
+        items: [],
+      },
+    });
+    const el = await renderRunDetail({ run_id: "legacy" });
+    document.body.appendChild(el);
+    const toggle = document.querySelector(".run-event-details-toggle") as HTMLButtonElement;
+    toggle.click();
+    expect(document.body.textContent).toContain("old profile text");
+  });
+
   it("reflection run without prompts or notes still renders cleanly", async () => {
     stub({
       "/api/runs/ref-bare": {
