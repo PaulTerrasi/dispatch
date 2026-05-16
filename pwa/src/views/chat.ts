@@ -524,7 +524,8 @@ function renderChatHeader(): { bar: HTMLElement; profileToggleBtn: HTMLButtonEle
 
 function prettyToolStart(name: string, _input: unknown): string {
   switch (name) {
-    case "patch_profile":
+    case "edit_profile":
+    case "patch_profile": // legacy: replayed from persisted history
       return "editing profile.md";
     case "add_source":
       return "adding source";
@@ -549,7 +550,8 @@ function prettyToolStart(name: string, _input: unknown): string {
 
 function toolIcon(name: string): string {
   switch (name) {
-    case "patch_profile":
+    case "edit_profile":
+    case "patch_profile": // legacy: replayed from persisted history
       return "✏️";
     case "add_source":
       return "➕";

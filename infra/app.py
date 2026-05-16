@@ -144,13 +144,26 @@ class MorningDigestStack(cdk.Stack):
         # handshake until the SDK's 60s timeout fires.
         api_env["HOME"] = "/tmp"
         api_env["CLAUDE_CONFIG_DIR"] = "/tmp/.claude"
+        # Make the Node heap ceiling explicit for the bundled Claude CLI
+        # subprocess. Node's cgroup-based default detection isn't guaranteed
+        # to follow the Lambda memory bump, and we've seen silent exit-1
+        # crashes consistent with heap pressure. --max-old-space-size caps
+        # only the V8 old generation; total Node RSS adds ~150-200 MB on
+        # top (new-space, code cache, stack), so 1536 caps Node at ~1.7 GB
+        # and leaves ~300 MB for the uvicorn Python process in the same
+        # 2048 MB Lambda.
+        api_env["NODE_OPTIONS"] = "--max-old-space-size=1536"
         api_fn = lambda_.DockerImageFunction(
             self,
             "ApiFunction",
             function_name="morning-digest-api",
             code=lambda_image,
             role=app_role,
-            memory_size=1024,
+            # 2048MB: the bundled Claude CLI subprocess (Node.js) was exiting
+            # silently with code 1 mid-chat at 1024MB, with no stderr lines
+            # captured — consistent with Node heap pressure inside the
+            # subprocess even though the Lambda itself was well under its limit.
+            memory_size=2048,
             # 5-minute cap so a long chat-tab agent turn (with tool calls that
             # may web_fetch) cannot hit the Lambda max. Most invocations finish
             # in seconds.

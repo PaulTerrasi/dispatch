@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
+    ResultMessage,
     StreamEvent,
     TextBlock,
     ToolResultBlock,
@@ -27,7 +28,19 @@ from fastapi.testclient import TestClient
 from digest.agent import RunState, build_chat_tools
 from digest.store import Store
 from server.app import create_app
-from server.routes_chat import _sse, _translate
+from server.routes_chat import _sse, _summarize_message, _translate
+
+
+def _result(is_error: bool = False) -> ResultMessage:
+    """Build a minimally-populated ResultMessage for tests."""
+    return ResultMessage(
+        subtype="error" if is_error else "success",
+        duration_ms=1,
+        duration_api_ms=1,
+        is_error=is_error,
+        num_turns=1,
+        session_id="s",
+    )
 
 
 @pytest.fixture
@@ -92,14 +105,22 @@ def test_translate_tool_use_block() -> None:
         model="test",
         content=[
             TextBlock(text="ignored here"),
-            ToolUseBlock(id="t1", name="patch_profile", input={"diff": "..."}),
+            ToolUseBlock(
+                id="t1",
+                name="edit_profile",
+                input={"find": "old", "replace": "new"},
+            ),
         ],
     )
     frames = _translate(msg)
     assert len(frames) == 1
     assert b"event: tool_start" in frames[0]
     payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
-    assert payload == {"id": "t1", "name": "patch_profile", "input": {"diff": "..."}}
+    assert payload == {
+        "id": "t1",
+        "name": "edit_profile",
+        "input": {"find": "old", "replace": "new"},
+    }
 
 
 def test_translate_tool_result_block() -> None:
@@ -204,12 +225,11 @@ async def test_chat_write_pushes_profile_changed(store: Store) -> None:
     tools = build_chat_tools(state, q)
     by_name = {t.name: t for t in tools}
 
-    # Seed a profile so the diff applies cleanly.
+    # Seed a profile so the edit applies cleanly.
     store.write_profile("# Profile\n\n- old\n")
-    diff = "--- a/profile.md\n+++ b/profile.md\n@@ -1,3 +1,3 @@\n # Profile\n \n-- old\n+- new\n"
-    result = await by_name["patch_profile"].handler({"diff": diff})
+    result = await by_name["edit_profile"].handler({"find": "- old", "replace": "- new"})
     assert not result.get("isError"), result
-    assert q.get_nowait() == "patch_profile"
+    assert q.get_nowait() == "edit_profile"
     assert "- new" in store.read_profile()
 
 
@@ -225,8 +245,7 @@ async def test_chat_write_blocked_by_reflection_lock(store: Store) -> None:
     assert held is not None
 
     store.write_profile("# Profile\n\n- old\n")
-    diff = "--- a/profile.md\n+++ b/profile.md\n@@ -1,3 +1,3 @@\n # Profile\n \n-- old\n+- new\n"
-    result = await by_name["patch_profile"].handler({"diff": diff})
+    result = await by_name["edit_profile"].handler({"find": "- old", "replace": "- new"})
     assert result.get("isError") is True
     # No profile_changed should fire on contention.
     assert q.empty()
@@ -319,6 +338,64 @@ def test_translate_user_message_with_non_tool_result_block() -> None:
 def test_translate_drops_other_message_types() -> None:
     """Anything not StreamEvent/AssistantMessage/UserMessage is dropped silently."""
     assert _translate({"type": "result"}) == []
+
+
+# ── _summarize_message ─────────────────────────────────────────────────────
+
+
+def test_summarize_skips_stream_events() -> None:
+    """StreamEvents fire once per token delta; including them would evict
+    AssistantMessage/UserMessage entries from the bounded buffer."""
+    msg = StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_delta", "delta": {"type": "text_delta", "text": "x"}},
+    )
+    assert _summarize_message(msg) is None
+
+
+def test_summarize_assistant_message_lists_tool_use_names() -> None:
+    msg = AssistantMessage(
+        model="x",
+        content=[
+            TextBlock(text="hi"),
+            ToolUseBlock(id="t1", name="read_profile", input={}),
+        ],
+    )
+    assert _summarize_message(msg) == {
+        "type": "AssistantMessage",
+        "blocks": ["TextBlock", "tool_use:read_profile"],
+    }
+
+
+def test_summarize_user_message_collects_tool_results_and_errors() -> None:
+    msg = UserMessage(
+        content=[
+            ToolResultBlock(tool_use_id="t1", content="ok", is_error=False),
+            ToolResultBlock(tool_use_id="t2", content="bad", is_error=True),
+        ]
+    )
+    assert _summarize_message(msg) == {
+        "type": "UserMessage",
+        "tool_results": [
+            {"tool_use_id": "t1", "is_error": False},
+            {"tool_use_id": "t2", "is_error": True},
+        ],
+    }
+
+
+def test_summarize_user_message_with_string_content() -> None:
+    msg = UserMessage(content="plain string")
+    assert _summarize_message(msg) == {"type": "UserMessage", "tool_results": []}
+
+
+def test_summarize_user_message_ignores_non_tool_result_blocks() -> None:
+    msg = UserMessage(content=[TextBlock(text="hi")])
+    assert _summarize_message(msg) == {"type": "UserMessage", "tool_results": []}
+
+
+def test_summarize_unknown_message_falls_back_to_class_name() -> None:
+    assert _summarize_message({"foo": "bar"}) == {"type": "dict"}
 
 
 # ── full /api/chat/stream SSE flow ───────────────────────────────────────────
@@ -576,3 +653,105 @@ def test_talk_error_frame_omits_optional_fields_when_unavailable(
     data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
     payload = json.loads(data_line[len(b"data: ") :])
     assert payload == {"message": "kaboom"}
+
+
+def test_talk_surfaces_recent_cli_messages_on_crash(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the CLI subprocess exits silently with no stderr, the SSE error
+    frame must still carry summaries of the last SDK messages so we can see
+    what the agent was doing right before the crash."""
+    import server.routes_chat as rt
+
+    class _CrashAfterMessages:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield AssistantMessage(
+                model="x", content=[ToolUseBlock(id="t1", name="read_profile", input={})]
+            )
+            yield UserMessage(
+                content=[ToolResultBlock(tool_use_id="t1", content="ok", is_error=False)]
+            )
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _CrashAfterMessages())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    error_line = next(line for line in body.split(b"\n\n") if line.startswith(b"event: error"))
+    data_line = next(ln for ln in error_line.split(b"\n") if ln.startswith(b"data: "))
+    payload = json.loads(data_line[len(b"data: ") :])
+    assert payload["cli_recent_messages"] == [
+        {"type": "AssistantMessage", "blocks": ["tool_use:read_profile"]},
+        {
+            "type": "UserMessage",
+            "tool_results": [{"tool_use_id": "t1", "is_error": False}],
+        },
+    ]
+
+
+def test_talk_suppresses_post_result_cli_exit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Known CLI bug: after emitting a successful ResultMessage the Node
+    subprocess sometimes exits with code 1. The conversation completed
+    cleanly, so we must swallow that exit and finish with a `done` frame
+    rather than surfacing a spurious `error` frame to the user."""
+    import server.routes_chat as rt
+
+    class _ExitAfterResult:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield _result(is_error=False)
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _ExitAfterResult())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    assert b"event: error" not in body
+    assert b"event: done" in body
+
+
+def test_talk_does_not_suppress_when_result_is_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ResultMessage with is_error=True is a real failure signal from the
+    agent — don't latch the suppression flag on it."""
+    import server.routes_chat as rt
+
+    class _ErrResultThenCrash:
+        async def run(self, prompt, options):
+            del prompt, options
+            yield _result(is_error=True)
+            raise Exception("Command failed with exit code 1")
+
+    monkeypatch.setattr(rt, "SdkAgentRunner", lambda: _ErrResultThenCrash())
+
+    body = b""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"history": [{"role": "user", "text": "hi"}]},
+    ) as r:
+        for chunk in r.iter_bytes():
+            body += chunk
+
+    assert b"event: error" in body
+    # Pin the contract: the suppression flag must NOT latch on an error-result,
+    # so we never emit a spurious `done` frame after the error.
+    assert b"event: done" not in body

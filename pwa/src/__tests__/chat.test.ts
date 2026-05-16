@@ -191,9 +191,9 @@ describe("renderChat — loadItems / persistItems", () => {
         {
           kind: "tool",
           id: "t9",
-          name: "patch_profile",
+          name: "edit_profile",
           label: "editing profile.md",
-          input: { diff: "abc" },
+          input: { find: "old", replace: "new" },
           output: "applied",
           status: "ok",
         },
@@ -365,7 +365,11 @@ describe("renderChat — send / reset / streaming", () => {
     ta.value = "edit profile";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
     const handlers = capturedHandlers.at(-1)!;
-    handlers.onToolStart?.({ id: "t1", name: "patch_profile", input: { diff: "..." } });
+    handlers.onToolStart?.({
+      id: "t1",
+      name: "edit_profile",
+      input: { find: "old", replace: "new" },
+    });
     handlers.onToolEnd?.({ tool_use_id: "t1", ok: true, output: "applied" });
     // Only the user message — no orphaned assistant bubble above the tool card.
     expect(document.querySelectorAll(".chat-msg").length).toBe(1);
@@ -403,7 +407,11 @@ describe("renderChat — send / reset / streaming", () => {
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
     const handlers = capturedHandlers.at(-1)!;
 
-    handlers.onToolStart?.({ id: "t1", name: "patch_profile", input: { diff: "abc" } });
+    handlers.onToolStart?.({
+      id: "t1",
+      name: "edit_profile",
+      input: { find: "old", replace: "new" },
+    });
     handlers.onToolStart?.({ id: "t2", name: "unknown_tool", input: {} });
     expect(document.querySelectorAll(".chat-tool-card").length).toBe(2);
     // Pending state shows the "running…" status label.
@@ -564,7 +572,7 @@ describe("renderChat — tool-start labels", () => {
     ta.value = "go";
     (document.querySelector(".chat-input .primary") as HTMLButtonElement).click();
     for (const [i, name] of [
-      "patch_profile",
+      "edit_profile",
       "add_source",
       "remove_source",
       "read_profile",

@@ -11,6 +11,7 @@ const mocks = {
   startRouter: vi.fn(),
   forceRefresh: vi.fn(),
   initPullToRefresh: vi.fn(),
+  initViewportTracker: vi.fn(),
 };
 
 function applyDoMocks() {
@@ -20,6 +21,7 @@ function applyDoMocks() {
     navigate: vi.fn(),
   }));
   vi.doMock("../pull-to-refresh", () => ({ initPullToRefresh: mocks.initPullToRefresh }));
+  vi.doMock("../viewport", () => ({ initViewportTracker: mocks.initViewportTracker }));
   vi.doMock("../views/today", () => ({ renderToday: () => document.createElement("div") }));
   vi.doMock("../views/archive", () => ({ renderArchive: () => document.createElement("div") }));
   vi.doMock("../views/chat", () => ({ renderChat: () => document.createElement("div") }));

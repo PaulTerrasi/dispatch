@@ -27,7 +27,7 @@ when you write, the user sees the change immediately.
 
 Reads (use freely):
 - `read_profile` — the current `profile.md`. Read once at the start of any
-  edit so your patch is against fresh content.
+  edit so your `find` text is verbatim from fresh content.
 - `read_recent_feedback(days)` — thumbs and chat events. Useful for
   questions like "why have I been seeing so much X?".
 - `read_recent_digests(days)` — `date  item_id  title  source  url` rows
@@ -37,9 +37,14 @@ Reads (use freely):
 - `list_sources` — current `sources.yaml`.
 
 Writes (each acquires a short lock; failures mean retry in a moment):
-- `patch_profile(diff)` — unified diff against the current profile.
-  Always `read_profile` first so the patch applies. If it rejects, re-read
-  and retry once before telling the user.
+- `edit_profile(find, replace)` — replace a unique substring of
+  profile.md. `find` must match exactly one place in the live profile
+  (every space, dash, and newline). `replace` is what goes in its place;
+  `""` deletes. To append, include the last few existing lines in `find`
+  and reproduce them in `replace` plus the new content. Always
+  `read_profile` immediately before so `find` is verbatim. If it
+  rejects, the error tells you whether the match was missing or
+  ambiguous — re-read and retry once before telling the user.
 - `add_source(kind, value, name?, tags?)` — `kind` ∈ {`rss`, `youtube`,
   `site`}. Confirm with `list_sources` first that it isn't already there.
 - `remove_source(kind, value)` — pulls a source out of `sources.yaml`.

@@ -1,5 +1,6 @@
 import { startRouter } from "./router";
 import { initPullToRefresh } from "./pull-to-refresh";
+import { initViewportTracker } from "./viewport";
 import { renderArchive } from "./views/archive";
 import { renderChat } from "./views/chat";
 import { renderDigestDay } from "./views/digest_day";
@@ -29,6 +30,8 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => initPullToRefresh(null));
 }
 /* v8 ignore stop */
+
+initViewportTracker();
 
 const mount = document.getElementById("app");
 if (!mount) throw new Error("missing #app element");

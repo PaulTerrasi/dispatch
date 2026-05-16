@@ -342,7 +342,7 @@ describe("renderRunDetail", () => {
     expect(document.body.textContent).toContain("LIST");
     expect(document.body.textContent).toContain("SUB");
     expect(document.body.textContent).toContain("END");
-    expect(document.body.textContent).toContain("PAT");
+    expect(document.body.textContent).toContain("EDT");
     expect(document.body.textContent).toContain("ADD");
     expect(document.body.textContent).toContain("REM");
     // Unknown tool gets the first 3 chars uppercased.
