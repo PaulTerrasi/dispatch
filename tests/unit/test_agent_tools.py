@@ -660,6 +660,52 @@ async def test_reflection_read_recent_digests(store: Store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reflection_read_recent_digests_caps_items_at_200(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """details['items'] should be sliced to at most 200 entries even if the
+    store has more, so the run record stays bounded for wide days windows."""
+    fake_items = [
+        {"date": "2026-05-10", "id": str(i), "title": "t", "source": "s", "url": "u"}
+        for i in range(250)
+    ]
+    monkeypatch.setattr(store, "recent_digest_items", lambda *, days: fake_items)
+    state = _state(store)
+    build_reflection_tools(state)
+    await state.current_tools["read_recent_digests"]({"days": 30})
+    entry = state.tool_log[-1]
+    assert len(entry["details"]["items"]) == 200
+
+
+@pytest.mark.asyncio
+async def test_submit_digest_details_strip_internal_fields(store: Store) -> None:
+    """details.items should drop the 'feedback' and 'run_id' bookkeeping keys
+    that the digest store needs but the run-detail view has no use for."""
+    state = _state(store)
+    build_curation_tools(state)
+    await state.current_tools["submit_digest"](
+        {
+            "items": [
+                {
+                    "type": "article",
+                    "title": "T",
+                    "source": "s",
+                    "url": "https://x/a",
+                    "summary": "ok",
+                }
+            ],
+            "agent_notes": "n",
+        }
+    )
+    entry = state.tool_log[-1]
+    item = entry["details"]["items"][0]
+    assert "feedback" not in item
+    assert "run_id" not in item
+    # The non-stripped fields are still there.
+    assert item["title"] == "T"
+
+
+@pytest.mark.asyncio
 async def test_read_triggering_curation_run_skips_legacy_runs(store: Store) -> None:
     """Legacy curation runs (no `submitted_item_ids` field) can't be matched —
     the recorded args carry only a "count", not the item ids, and there's no

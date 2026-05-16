@@ -245,11 +245,13 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         try:
             doc = await web_fetch(url)
             payload = {"url": doc.url, "title": doc.title, "text": doc.text[:20_000]}
+            # `url` is already in args; only persist the resolved title/text
+            # so the run-detail UI doesn't double-render the same URL.
             state.record(
                 "web_fetch",
                 {"url": url},
                 f"{len(doc.text)} chars",
-                details=dict(payload),
+                details={"title": doc.title, "text": doc.text[:20_000]},
             )
             return {"content": [{"type": "text", "text": json.dumps(payload)}]}
         except Exception as e:
@@ -586,10 +588,10 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_curation_runs",
             {"days": days},
             f"{len(runs)} runs",
-            details={
-                "text": text[:20_000],
-                "run_ids": [r["run_id"] for r in runs if r.get("run_id")],
-            },
+            # Don't persist `text` — it's a rendered summary that can grow
+            # large, and the individual runs are already addressable by id
+            # through the run-detail view.
+            details={"run_ids": [r["run_id"] for r in runs if r.get("run_id")]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
