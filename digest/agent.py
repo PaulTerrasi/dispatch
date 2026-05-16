@@ -521,7 +521,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
                 "patch_profile",
                 {},
                 f"rejected: {e}",
-                details={"diff": diff, "error": str(e)},
+                details={"diff": diff[:20_000], "error": str(e)},
             )
             return {
                 "content": [{"type": "text", "text": f"patch rejected: {e}"}],
@@ -536,7 +536,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             # The diff alone is enough to reconstruct the change; storing both
             # `before` and `after` would duplicate the full profile on every
             # patch call (and `after` of call N = `before` of call N+1 anyway).
-            details={"diff": diff},
+            details={"diff": diff[:20_000]},
         )
         return {"content": [{"type": "text", "text": "profile.md updated."}]}
 
