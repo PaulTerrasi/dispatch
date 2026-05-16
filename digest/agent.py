@@ -476,7 +476,9 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "add_source",
             {"kind": kind, "value": value},
             "added",
-            details={"kind": kind, "value": value, "name": name, "tags": tags},
+            # kind/value are already in args; only persist the fields that
+            # don't otherwise surface in the run-detail UI.
+            details={"name": name, "tags": tags},
         )
         return {"content": [{"type": "text", "text": f"added {kind} source: {value}"}]}
 
