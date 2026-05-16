@@ -47,6 +47,11 @@ AGENT_WALL_TIMEOUT_SECONDS = 240.0
 # "Check stderr output for details" is the only thing surfaced on a CLI
 # crash unless we buffer the lines ourselves.
 CLI_STDERR_BUFFER_LINES = 50
+# Compact summaries of the last N SDK messages, kept so we can include them
+# in the failure log when the CLI subprocess silently exits with code 1.
+# 20 covers a couple of tool round-trips, enough to see what the CLI was
+# doing immediately before the crash.
+CLI_MESSAGE_BUFFER_ENTRIES = 20
 
 
 class ChatTurn(BaseModel):
@@ -108,6 +113,37 @@ def _tool_result_text(content: Any) -> str:
     if len(text) > TOOL_OUTPUT_MAX_CHARS:
         text = text[:TOOL_OUTPUT_MAX_CHARS] + "\n…(truncated)"
     return text
+
+
+def _summarize_message(msg: Any) -> dict[str, Any] | None:
+    """Return a small dict summarising one SDK message for the crash buffer,
+    or None if the message should be skipped.
+
+    Kept compact: the goal is to see the *shape* of the last few message
+    boundaries when a silent CLI crash happens, not to replay them.
+
+    StreamEvents (one per token delta) are skipped — they'd evict every
+    AssistantMessage/UserMessage in the bounded deque during any
+    non-trivial text generation pass, defeating the buffer's purpose.
+    """
+    if isinstance(msg, StreamEvent):
+        return None
+    if isinstance(msg, AssistantMessage):
+        blocks: list[str] = []
+        for b in msg.content:
+            if isinstance(b, ToolUseBlock):
+                blocks.append(f"tool_use:{b.name}")
+            else:
+                blocks.append(type(b).__name__)
+        return {"type": "AssistantMessage", "blocks": blocks}
+    if isinstance(msg, UserMessage):
+        content = msg.content if isinstance(msg.content, list) else []
+        results: list[dict[str, Any]] = []
+        for b in content:
+            if isinstance(b, ToolResultBlock):
+                results.append({"tool_use_id": b.tool_use_id, "is_error": bool(b.is_error)})
+        return {"type": "UserMessage", "tool_results": results}
+    return {"type": type(msg).__name__}
 
 
 def _translate(msg: Any) -> list[bytes]:
@@ -185,6 +221,7 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
         log.warning("claude_cli.stderr", line=line)
 
     options.stderr = _capture_stderr
+    cli_messages_buffer: deque[dict[str, Any]] = deque(maxlen=CLI_MESSAGE_BUFFER_ENTRIES)
     runner = SdkAgentRunner()
 
     prompt = (
@@ -213,6 +250,9 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
 
     async def _drive_agent() -> None:
         async for msg in runner.run(prompt=prompt, options=options):
+            summary = _summarize_message(msg)
+            if summary is not None:
+                cli_messages_buffer.append(summary)
             for chunk in _translate(msg):
                 await out_queue.put(chunk)
         await out_queue.put(_sse("done", {}))
@@ -239,12 +279,14 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
             exit_code = getattr(e, "exit_code", None)
             cli_stderr = getattr(e, "stderr", None)
             buffered_stderr = "\n".join(cli_stderr_buffer) if cli_stderr_buffer else None
+            recent_messages = list(cli_messages_buffer) if cli_messages_buffer else None
             log.exception(
                 "chat.agent_failed",
                 error_type=type(e).__name__,
                 exit_code=exit_code,
                 cli_stderr=cli_stderr,
                 cli_stderr_buffered=buffered_stderr,
+                cli_recent_messages=recent_messages,
             )
             payload: dict[str, Any] = {"message": str(e)}
             if exit_code is not None:
@@ -257,6 +299,12 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
                 # actionable for the user. Revisit if this ever becomes
                 # multi-tenant or the CLI starts emitting credential fragments.
                 payload["cli_stderr_buffered"] = buffered_stderr
+            if recent_messages:
+                # Forwarded to the browser for the same single-tenant reason
+                # as cli_stderr_buffered above. Summaries are shape-only
+                # (tool names, block types, opaque SDK-generated tool_use_ids,
+                # is_error flags) — no raw tool inputs/outputs.
+                payload["cli_recent_messages"] = recent_messages
             await out_queue.put(_sse("error", payload))
         finally:
             await out_queue.put(None)
