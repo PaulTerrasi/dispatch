@@ -93,18 +93,21 @@ def _nearest_line_hint(text: str, needle: str) -> str:
     first = lines[0] if lines else ""
     if len(first) < 4:
         return ""
-    best_i = 0
+    # Track the matched line text alongside its number so the "best" pair
+    # is always self-consistent — no index arithmetic that could quietly
+    # alias to splitlines()[-1] if the initial state ever leaked through.
+    best: tuple[int, str] | None = None
     best_overlap = 0
     for i, line in enumerate(text.splitlines(), start=1):
         n = _common_prefix_len(first, line)
         if n > best_overlap:
             best_overlap = n
-            best_i = i
+            best = (i, line)
     # Require at least 4 chars (or half the needle line, whichever is more)
     # of overlap before claiming a match — otherwise the hint is noise.
-    if best_overlap >= max(4, len(first) // 2):
-        live = text.splitlines()[best_i - 1]
-        return f"(closest live line is {best_i}: {live!r})"
+    if best is not None and best_overlap >= max(4, len(first) // 2):
+        i, live = best
+        return f"(closest live line is {i}: {live!r})"
     return ""
 
 
