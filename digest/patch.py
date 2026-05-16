@@ -85,6 +85,12 @@ def _nearest_line_hint(text: str, needle: str) -> str:
     show it. Agents most often paste a stale or slightly-edited version of
     an existing block — surfacing the live version of its first line is
     usually enough to unblock them without another read_profile.
+
+    Limitation: prefix overlap won't surface a hint when the stale version
+    differs at the very start of the line (e.g. different leading
+    whitespace, or a capitalisation change on the first character). For
+    those cases the agent has to re-read the profile. If that turns out
+    to be common in practice, swap the heuristic for `difflib`.
     """
     # Defensive: callers don't guarantee `needle` is non-empty here. Use
     # an explicit list check so the indexing is safe regardless of what
