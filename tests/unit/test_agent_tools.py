@@ -274,9 +274,7 @@ async def test_submit_digest_defaults_type_to_article(store: Store) -> None:
 async def test_reflection_edit_profile_rejects_missing_find(store: Store) -> None:
     state = _state(store)
     build_reflection_tools(state)
-    out = await state.current_tools["edit_profile"](
-        {"find": "nope-not-in-profile", "replace": "x"}
-    )
+    out = await state.current_tools["edit_profile"]({"find": "nope-not-in-profile", "replace": "x"})
     assert out.get("isError") is True
     assert state.profile_patches_applied == 0
 
