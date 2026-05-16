@@ -328,8 +328,9 @@ def get_run(store: StoreDep, run_id: str) -> RunDetail:
     tool_log: list[ToolCallEntry] = []
     for e in run.get("tool_log") or []:
         # Legacy runs stored profile_snapshot as a flat entry key; new runs
-        # nest all extras under `details`. Surface either to the client, and
-        # strip the legacy key so it doesn't ride along as an unknown field.
+        # nest all extras under `details`. Pydantic would drop the flat key
+        # silently (extra="ignore"), so move it into details where the run
+        # detail UI can find it.
         if (
             isinstance(e, dict)
             and e.get("tool") == "read_profile"
