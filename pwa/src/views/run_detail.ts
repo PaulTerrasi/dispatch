@@ -440,8 +440,7 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
     // `value` covers list_sources rows (where the feed URL lives there).
     // Non-URL values (feedback-event "up"/"down", YouTube channel ids) are
     // filtered out by the /^https?:/i guard below, so they don't become links.
-    const url =
-      pickString(row, "url") ?? pickString(row, "link") ?? pickString(row, "value");
+    const url = pickString(row, "url") ?? pickString(row, "link") ?? pickString(row, "value");
     const sub =
       pickString(row, "source") ??
       pickString(row, "kind") ??
