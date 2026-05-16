@@ -429,7 +429,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             details={
                 "items": [
                     {k: (v[:2_000] if isinstance(v, str) else v) for k, v in i.items()}
-                    for i in items[:200]
+                    for i in items[:50]
                 ]
             },
         )

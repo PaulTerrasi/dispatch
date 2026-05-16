@@ -660,21 +660,21 @@ async def test_reflection_read_recent_digests(store: Store) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reflection_read_recent_digests_caps_items_at_200(
+async def test_reflection_read_recent_digests_caps_items_at_50(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """details['items'] should be sliced to at most 200 entries even if the
+    """details['items'] should be sliced to at most 50 entries even if the
     store has more, so the run record stays bounded for wide days windows."""
     fake_items = [
         {"date": "2026-05-10", "id": str(i), "title": "t", "source": "s", "url": "u"}
-        for i in range(250)
+        for i in range(100)
     ]
     monkeypatch.setattr(store, "recent_digest_items", lambda *, days: fake_items)
     state = _state(store)
     build_reflection_tools(state)
     await state.current_tools["read_recent_digests"]({"days": 30})
     entry = state.tool_log[-1]
-    assert len(entry["details"]["items"]) == 200
+    assert len(entry["details"]["items"]) == 50
 
 
 @pytest.mark.asyncio
