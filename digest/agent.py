@@ -317,11 +317,9 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "ok",
             details={
                 "items": [
-                    {
-                        k: (v[:2_000] if isinstance(v, str) else v)
-                        for k, v in i.items()
-                        if k not in ("feedback", "run_id")
-                    }
+                    _truncate_entry(
+                        {k: v for k, v in i.items() if k not in ("feedback", "run_id")}
+                    )
                     for i in items_out
                 ],
                 "agent_notes": notes,
@@ -661,8 +659,8 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             f"matched run {match.get('run_id', '?')}",
             details={
                 "matched_run_id": match.get("run_id"),
-                "profile_snapshot": snapshot[:5_000] if snapshot else snapshot,
                 "text": text[:20_000],
+                **({"profile_snapshot": snapshot[:5_000]} if snapshot else {}),
             },
         )
         return {"content": [{"type": "text", "text": text}]}
