@@ -324,36 +324,15 @@ def test_translate_drops_other_message_types() -> None:
 # ── _summarize_message ─────────────────────────────────────────────────────
 
 
-def test_summarize_stream_event_includes_event_and_delta_types() -> None:
+def test_summarize_skips_stream_events() -> None:
+    """StreamEvents fire once per token delta; including them would evict
+    AssistantMessage/UserMessage entries from the bounded buffer."""
     msg = StreamEvent(
         uuid="u",
         session_id="s",
         event={"type": "content_block_delta", "delta": {"type": "text_delta", "text": "x"}},
     )
-    assert _summarize_message(msg) == {
-        "type": "StreamEvent",
-        "event_type": "content_block_delta",
-        "delta_type": "text_delta",
-    }
-
-
-def test_summarize_stream_event_without_delta_block() -> None:
-    msg = StreamEvent(uuid="u", session_id="s", event={"type": "message_start"})
-    assert _summarize_message(msg) == {
-        "type": "StreamEvent",
-        "event_type": "message_start",
-        "delta_type": None,
-    }
-
-
-def test_summarize_stream_event_with_non_dict_delta() -> None:
-    """If the SDK ever returns a non-dict delta we still produce a summary."""
-    msg = StreamEvent(uuid="u", session_id="s", event={"type": "x", "delta": "raw"})
-    assert _summarize_message(msg) == {
-        "type": "StreamEvent",
-        "event_type": "x",
-        "delta_type": None,
-    }
+    assert _summarize_message(msg) is None
 
 
 def test_summarize_assistant_message_lists_tool_use_names() -> None:

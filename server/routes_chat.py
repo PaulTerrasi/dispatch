@@ -115,22 +115,19 @@ def _tool_result_text(content: Any) -> str:
     return text
 
 
-def _summarize_message(msg: Any) -> dict[str, Any]:
-    """Return a small dict summarising one SDK message for the crash buffer.
+def _summarize_message(msg: Any) -> dict[str, Any] | None:
+    """Return a small dict summarising one SDK message for the crash buffer,
+    or None if the message should be skipped.
 
-    Kept compact: the goal is to see the *shape* of the last 20 messages
-    when a silent CLI crash happens, not to replay them.
+    Kept compact: the goal is to see the *shape* of the last few message
+    boundaries when a silent CLI crash happens, not to replay them.
+
+    StreamEvents (one per token delta) are skipped — they'd evict every
+    AssistantMessage/UserMessage in the bounded deque during any
+    non-trivial text generation pass, defeating the buffer's purpose.
     """
     if isinstance(msg, StreamEvent):
-        ev = msg.event or {}
-        delta = ev.get("delta") or {}
-        return {
-            "type": "StreamEvent",
-            "event_type": ev.get("type"),
-            # `delta_type` is None when delta is absent or not a dict — matches
-            # how _translate handles the same field defensively.
-            "delta_type": delta.get("type") if isinstance(delta, dict) else None,
-        }
+        return None
     if isinstance(msg, AssistantMessage):
         blocks: list[str] = []
         for b in msg.content:
@@ -253,7 +250,9 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
 
     async def _drive_agent() -> None:
         async for msg in runner.run(prompt=prompt, options=options):
-            cli_messages_buffer.append(_summarize_message(msg))
+            summary = _summarize_message(msg)
+            if summary is not None:
+                cli_messages_buffer.append(summary)
             for chunk in _translate(msg):
                 await out_queue.put(chunk)
         await out_queue.put(_sse("done", {}))
@@ -303,7 +302,8 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
             if recent_messages:
                 # Forwarded to the browser for the same single-tenant reason
                 # as cli_stderr_buffered above. Summaries are shape-only
-                # (tool names, block types), not raw tool inputs/outputs.
+                # (tool names, block types, opaque SDK-generated tool_use_ids,
+                # is_error flags) — no raw tool inputs/outputs.
                 payload["cli_recent_messages"] = recent_messages
             await out_queue.put(_sse("error", payload))
         finally:
