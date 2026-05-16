@@ -708,7 +708,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "write_reflection_memory",
             {},
             f"{len(text)} chars written",
-            details={"text": text},
+            details={"text": text[:5_000]},
         )
         return {"content": [{"type": "text", "text": "reflection memory updated."}]}
 
