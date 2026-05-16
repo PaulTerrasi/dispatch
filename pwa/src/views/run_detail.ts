@@ -436,7 +436,8 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
       pickString(row, "ts");
 
     const safeUrl = url && /^https?:/i.test(url) ? url : undefined;
-    const label = title ?? sub ?? JSON.stringify(row);
+    const fallback = JSON.stringify(row);
+    const label = title ?? sub ?? (fallback.length > 200 ? fallback.slice(0, 200) + "…" : fallback);
     const row_title = document.createElement("div");
     row_title.className = "run-event-detail-row-title";
     if (safeUrl) {
