@@ -649,6 +649,18 @@ html:has(body.chat-page) {
 }
 body.chat-page {
   overflow: hidden;
+  /* Pin body to the viewport. `overflow: hidden` on html/body alone doesn't
+     stop iOS Safari from translating the visual viewport when an input is
+     focused — the document stays put but the visible area slides up, making
+     the chat appear to scroll off-screen. A fixed body cannot be panned by
+     that behavior. */
+  position: fixed;
+  /* Pin three sides explicitly; omitting `bottom` (leaving it `auto`) lets
+     the `height` below control the element's size rather than stretching
+     it to fill the viewport. */
+  top: 0;
+  left: 0;
+  right: 0;
   height: var(--viewport-h, 100dvh);
   /* The base `body { min-height: 100vh }` rule would otherwise win when the
      keyboard shrinks `--viewport-h` below `100vh`, leaving body taller than
