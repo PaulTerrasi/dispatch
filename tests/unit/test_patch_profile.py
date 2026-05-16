@@ -47,6 +47,14 @@ def test_find_not_present_rejected():
         edit_profile("# Profile\n- LLMs\n", "- WRONG", "- new")
 
 
+def test_absent_find_equals_replace_reports_not_found():
+    """If `find` isn't in the profile, "not found" is more actionable than
+    "identical" even when the strings happen to match — otherwise the
+    agent could mistake the rejection for an already-applied no-op."""
+    with pytest.raises(EditError, match="not present"):
+        edit_profile("a\nb\n", "missing-line", "missing-line")
+
+
 def test_not_present_hint_points_at_live_line():
     """When the agent pastes a stale version of an existing line, the
     error should hint at the live version so they can retry without

@@ -37,9 +37,11 @@ def edit_profile(original: str, find: str, replace: str) -> str:
             "existing lines in `find` and reproduce them in `replace` "
             "followed by the new content."
         )
-    if find == replace:
-        raise EditError("find and replace are identical — nothing to change.")
     count = original.count(find)
+    # Check presence before the identical-strings check: if `find` isn't in
+    # the profile but happens to equal `replace`, "not found" is the more
+    # actionable signal — otherwise the agent might think the edit was
+    # already applied when in fact `find` doesn't exist there at all.
     if count == 0:
         hint = _nearest_line_hint(original, find)
         raise EditError(
@@ -54,6 +56,8 @@ def edit_profile(original: str, find: str, replace: str) -> str:
             f"{', '.join(str(n) for n in locations)}). Include more "
             "surrounding context in `find` so it matches exactly one spot."
         )
+    if find == replace:
+        raise EditError("find and replace are identical — nothing to change.")
     return original.replace(find, replace, 1)
 
 
@@ -82,8 +86,9 @@ def _nearest_line_hint(text: str, needle: str) -> str:
     an existing block — surfacing the live version of its first line is
     usually enough to unblock them without another read_profile.
     """
-    # `"\n".splitlines()` is `[]`, so guard against an empty list even when
-    # `needle` is truthy.
+    # Defensive: callers don't guarantee `needle` is non-empty here. Use
+    # an explicit list check so the indexing is safe regardless of what
+    # `splitlines()` returns.
     lines = needle.splitlines()
     first = lines[0] if lines else ""
     if len(first) < 4:
