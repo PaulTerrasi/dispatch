@@ -422,12 +422,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_digests",
             {"days": days},
             f"{len(items)} items",
-            details={
-                "items": [
-                    {k: (v[:2_000] if isinstance(v, str) else v) for k, v in i.items()}
-                    for i in items[:50]
-                ]
-            },
+            details={"items": [_truncate_entry(i) for i in items[:50]]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
