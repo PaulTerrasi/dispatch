@@ -44,11 +44,11 @@ def edit_profile(original: str, find: str, replace: str) -> str:
     # already applied when in fact `find` doesn't exist there at all.
     if count == 0:
         hint = _nearest_line_hint(original, find)
-        raise EditError(
+        base = (
             "find string not present in profile.md. Call read_profile first "
-            "and copy the text verbatim, preserving every space, dash, and "
-            "newline. " + hint
+            "and copy the text verbatim, preserving every space, dash, and newline."
         )
+        raise EditError(base + (" " + hint if hint else ""))
     if count > 1:
         locations = _match_line_numbers(original, find)
         raise EditError(
