@@ -317,9 +317,7 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "ok",
             details={
                 "items": [
-                    _truncate_entry(
-                        {k: v for k, v in i.items() if k not in ("feedback", "run_id")}
-                    )
+                    _truncate_entry({k: v for k, v in i.items() if k not in ("feedback", "run_id")})
                     for i in items_out
                 ],
                 "agent_notes": notes,
