@@ -105,14 +105,22 @@ def test_translate_tool_use_block() -> None:
         model="test",
         content=[
             TextBlock(text="ignored here"),
-            ToolUseBlock(id="t1", name="patch_profile", input={"diff": "..."}),
+            ToolUseBlock(
+                id="t1",
+                name="edit_profile",
+                input={"find": "old", "replace": "new"},
+            ),
         ],
     )
     frames = _translate(msg)
     assert len(frames) == 1
     assert b"event: tool_start" in frames[0]
     payload = json.loads(frames[0].decode().split("data: ", 1)[1].rstrip("\n"))
-    assert payload == {"id": "t1", "name": "patch_profile", "input": {"diff": "..."}}
+    assert payload == {
+        "id": "t1",
+        "name": "edit_profile",
+        "input": {"find": "old", "replace": "new"},
+    }
 
 
 def test_translate_tool_result_block() -> None:
@@ -217,12 +225,11 @@ async def test_chat_write_pushes_profile_changed(store: Store) -> None:
     tools = build_chat_tools(state, q)
     by_name = {t.name: t for t in tools}
 
-    # Seed a profile so the diff applies cleanly.
+    # Seed a profile so the edit applies cleanly.
     store.write_profile("# Profile\n\n- old\n")
-    diff = "--- a/profile.md\n+++ b/profile.md\n@@ -1,3 +1,3 @@\n # Profile\n \n-- old\n+- new\n"
-    result = await by_name["patch_profile"].handler({"diff": diff})
+    result = await by_name["edit_profile"].handler({"find": "- old", "replace": "- new"})
     assert not result.get("isError"), result
-    assert q.get_nowait() == "patch_profile"
+    assert q.get_nowait() == "edit_profile"
     assert "- new" in store.read_profile()
 
 
@@ -238,8 +245,7 @@ async def test_chat_write_blocked_by_reflection_lock(store: Store) -> None:
     assert held is not None
 
     store.write_profile("# Profile\n\n- old\n")
-    diff = "--- a/profile.md\n+++ b/profile.md\n@@ -1,3 +1,3 @@\n # Profile\n \n-- old\n+- new\n"
-    result = await by_name["patch_profile"].handler({"diff": diff})
+    result = await by_name["edit_profile"].handler({"find": "- old", "replace": "- new"})
     assert result.get("isError") is True
     # No profile_changed should fire on contention.
     assert q.empty()

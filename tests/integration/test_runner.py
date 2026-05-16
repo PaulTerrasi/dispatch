@@ -170,7 +170,7 @@ async def test_reflection_can_edit_profile(
     tmp_data_dir: Path, captured_state: dict[str, RunState | None]
 ):
     """Reflection contract: feedback like 'more woodworking' should be
-    actionable via patch_profile."""
+    actionable via edit_profile."""
     from digest.runner import reflect_now
 
     store = Store(tmp_data_dir)
@@ -193,15 +193,18 @@ async def test_reflection_can_edit_profile(
     }
     store.append_feedback(event)
 
-    diff = (
-        "@@ -3,2 +3,3 @@\n ## Standing interests\n - LLMs\n+- Woodworking — beginner, hand tools\n"
-    )
     runner = _ReflectScriptedRunner(
         get_state=lambda: captured_state["state"],
         script=[
             ("read_profile", {}),
             ("read_recent_feedback", {"days": 14}),
-            ("patch_profile", {"diff": diff}),
+            (
+                "edit_profile",
+                {
+                    "find": "## Standing interests\n- LLMs\n",
+                    "replace": "## Standing interests\n- LLMs\n- Woodworking — beginner, hand tools\n",
+                },
+            ),
             ("end_reflection", {"notes": "added woodworking interest per chat feedback."}),
         ],
     )

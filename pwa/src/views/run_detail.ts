@@ -196,7 +196,8 @@ function badgeInfo(tool: string): { text: string; cls: string } {
   if (tool === "list_sources") return { text: "LIST", cls: "run-badge-read" };
   if (tool === "submit_digest") return { text: "SUB", cls: "run-badge-action" };
   if (tool === "end_reflection") return { text: "END", cls: "run-badge-action" };
-  if (tool === "patch_profile") return { text: "PAT", cls: "run-badge-mutate" };
+  if (tool === "edit_profile" || tool === "patch_profile")
+    return { text: "EDT", cls: "run-badge-mutate" };
   if (tool === "add_source") return { text: "ADD", cls: "run-badge-mutate" };
   if (tool === "remove_source") return { text: "REM", cls: "run-badge-mutate" };
   return { text: tool.slice(0, 3).toUpperCase(), cls: "run-badge-read" };
