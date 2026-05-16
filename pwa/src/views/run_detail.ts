@@ -421,7 +421,7 @@ function renderDetailValue(value: unknown): HTMLElement {
 }
 
 function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
-  const list = document.createElement("ol");
+  const list = document.createElement("ul");
   list.className = "run-event-detail-list";
   for (const row of rows) {
     const li = document.createElement("li");

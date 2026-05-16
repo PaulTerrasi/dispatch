@@ -333,7 +333,7 @@ def get_run(store: StoreDep, run_id: str) -> RunDetail:
         if (
             isinstance(e, dict)
             and e.get("tool") == "read_profile"
-            and not e.get("details")
+            and e.get("details") is None
             and isinstance(e.get("profile_snapshot"), str)
         ):
             snapshot = e["profile_snapshot"]

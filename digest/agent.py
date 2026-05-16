@@ -651,7 +651,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_reflection_memory",
             {},
             f"{len(text)} chars",
-            details={"text": text},
+            details={"text": text[:5_000]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
