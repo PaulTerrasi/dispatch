@@ -351,7 +351,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     )
     async def _read_profile(_args: dict[str, Any]) -> dict[str, Any]:
         text = state.store.read_profile()
-        state.record("read_profile", {}, f"{len(text)} chars", details={"profile": text})
+        state.record(
+            "read_profile",
+            {},
+            f"{len(text)} chars",
+            details={"profile": text[:20_000]},
+        )
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -554,7 +559,10 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_curation_runs",
             {"days": days},
             f"{len(runs)} runs",
-            details={"text": text[:20_000], "run_ids": [r.get("run_id") for r in runs]},
+            details={
+                "text": text[:20_000],
+                "run_ids": [r["run_id"] for r in runs if r.get("run_id")],
+            },
         )
         return {"content": [{"type": "text", "text": text}]}
 

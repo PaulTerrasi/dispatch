@@ -328,13 +328,16 @@ def get_run(store: StoreDep, run_id: str) -> RunDetail:
     tool_log: list[ToolCallEntry] = []
     for e in run.get("tool_log") or []:
         # Legacy runs stored profile_snapshot as a flat entry key; new runs
-        # nest all extras under `details`. Surface either to the client.
+        # nest all extras under `details`. Surface either to the client, and
+        # strip the legacy key so it doesn't ride along as an unknown field.
         if (
             isinstance(e, dict)
             and not e.get("details")
             and isinstance(e.get("profile_snapshot"), str)
         ):
-            e = {**e, "details": {"profile_snapshot": e["profile_snapshot"]}}
+            snapshot = e["profile_snapshot"]
+            e = {k: v for k, v in e.items() if k != "profile_snapshot"}
+            e["details"] = {"profile_snapshot": snapshot}
         try:
             tool_log.append(ToolCallEntry(**e))
         except (TypeError, ValueError) as exc:
