@@ -720,7 +720,12 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
     )
     async def _end_reflection(args: dict[str, Any]) -> dict[str, Any]:
         state.reflection_notes = str(args.get("notes") or "")
-        state.record("end_reflection", {}, "ok", details={"notes": state.reflection_notes})
+        state.record(
+            "end_reflection",
+            {},
+            "ok",
+            details={"notes": state.reflection_notes[:5_000]},
+        )
         return {"content": [{"type": "text", "text": "reflection complete."}]}
 
     tools = [
