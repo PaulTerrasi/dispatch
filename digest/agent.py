@@ -407,7 +407,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_digests",
             {"days": days},
             f"{len(items)} items",
-            details={"items": items},
+            details={"items": items[:200]},
         )
         return {"content": [{"type": "text", "text": text}]}
 
@@ -502,12 +502,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             }
         state.store.write_sources(filtered)
         state.sources_changed += 1
-        state.record(
-            "remove_source",
-            {"kind": kind, "value": value},
-            "removed",
-            details={"kind": kind, "value": value},
-        )
+        state.record("remove_source", {"kind": kind, "value": value}, "removed")
         return {"content": [{"type": "text", "text": f"removed {kind} source: {value}"}]}
 
     @tool(
