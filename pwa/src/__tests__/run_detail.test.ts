@@ -496,6 +496,7 @@ describe("renderRunDetail", () => {
                 { title: "Plain title only" },
                 { source: "sub-only" },
                 { id: "no-title-no-sub" },
+                { extra: "z".repeat(300) },
               ],
               unknown_detail_key: "free-form value",
             },
@@ -516,6 +517,9 @@ describe("renderRunDetail", () => {
     expect(titles[2].textContent).toBe("sub-only");
     // No title and no sub → fall back to the row's JSON.
     expect(titles[3].textContent).toContain("no-title-no-sub");
+    // Long JSON fallback gets sliced at 200 chars + ellipsis.
+    expect(titles[4].textContent!.endsWith("…")).toBe(true);
+    expect(titles[4].textContent!.length).toBeLessThanOrEqual(201);
     // Unknown detail key falls through to the key name itself as the label.
     expect(document.body.textContent).toContain("unknown_detail_key");
   });
