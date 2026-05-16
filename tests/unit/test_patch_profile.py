@@ -63,6 +63,17 @@ def test_non_unique_find_rejected_with_line_numbers():
         edit_profile(original, "- a", "- A")
 
 
+def test_non_unique_overlapping_needle_reports_non_overlapping_count():
+    """`str.count()` is non-overlapping; the line-number list must match
+    that semantics — `aa` in `aaaa` is 2 occurrences (positions 0, 2),
+    not 3."""
+    with pytest.raises(EditError, match=r"appears 2 times.*lines 1, 1") as exc:
+        edit_profile("aaaa\n", "aa", "X")
+    # The list has exactly 2 entries (not 3) — i.e. no extra ", 1" suffix.
+    msg = str(exc.value)
+    assert msg.count(", ") <= 1
+
+
 def test_preserves_trailing_newline_state():
     """No-newline files stay no-newline; newline files stay newline."""
     assert edit_profile("a\nb", "b", "B") == "a\nB"

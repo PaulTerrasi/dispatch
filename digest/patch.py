@@ -58,7 +58,13 @@ def edit_profile(original: str, find: str, replace: str) -> str:
 
 
 def _match_line_numbers(text: str, needle: str) -> list[int]:
-    """1-based line numbers where each occurrence of `needle` begins."""
+    """1-based line numbers where each occurrence of `needle` begins.
+
+    Advances by `len(needle)` to count non-overlapping matches, matching
+    `str.count()` semantics — so a needle like "aa" in "aaaa" reports two
+    matches, not three, keeping this in sync with the count shown in the
+    error message.
+    """
     lines: list[int] = []
     start = 0
     while True:
@@ -66,7 +72,7 @@ def _match_line_numbers(text: str, needle: str) -> list[int]:
         if idx < 0:
             break
         lines.append(text.count("\n", 0, idx) + 1)
-        start = idx + 1
+        start = idx + len(needle)
     return lines
 
 
