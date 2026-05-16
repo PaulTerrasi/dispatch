@@ -494,9 +494,12 @@ describe("renderRunDetail", () => {
               entries: [
                 { title: "Evil", url: "javascript:alert(1)" },
                 { title: "Plain title only" },
-                { source: "sub-only" },
-                { id: "no-title-no-sub" },
-                { extra: "z".repeat(300) },
+                { name: "Named thing" },
+                // Rows without title/name fall through to a JSON <pre> so
+                // every field (ts, item_id, kind, value, …) stays visible —
+                // critical for feedback events where the heuristic title/sub
+                // picker would otherwise hide most of the fields.
+                { ts: "2026-05-14", kind: "thumb", value: "up", item_id: "abc" },
               ],
               unknown_detail_key: "free-form value",
             },
@@ -510,16 +513,18 @@ describe("renderRunDetail", () => {
     (document.querySelector(".run-event-details-toggle") as HTMLButtonElement).click();
     // No anchors rendered: the only "URL" was a javascript: scheme, dropped.
     expect(document.querySelectorAll(".run-event-detail-row-title a").length).toBe(0);
-    // Title-only and sub-only rows still render their text.
+    // Title-bearing rows show the title text.
     const titles = document.querySelectorAll(".run-event-detail-row-title");
     expect(titles[0].textContent).toBe("Evil");
     expect(titles[1].textContent).toBe("Plain title only");
-    expect(titles[2].textContent).toBe("sub-only");
-    // No title and no sub → fall back to the row's JSON.
-    expect(titles[3].textContent).toContain("no-title-no-sub");
-    // Long JSON fallback gets sliced at 200 chars + ellipsis.
-    expect(titles[4].textContent!.endsWith("…")).toBe(true);
-    expect(titles[4].textContent!.length).toBeLessThanOrEqual(201);
+    expect(titles[2].textContent).toBe("Named thing");
+    // The title-less row falls through to a JSON <pre> exposing every field.
+    const eventPre = Array.from(document.querySelectorAll(".run-event-detail-pre")).find((n) =>
+      n.textContent?.includes('"item_id": "abc"'),
+    );
+    expect(eventPre).toBeDefined();
+    expect(eventPre!.textContent).toContain('"kind": "thumb"');
+    expect(eventPre!.textContent).toContain('"value": "up"');
     // Unknown detail key falls through to the key name itself as the label.
     expect(document.body.textContent).toContain("unknown_detail_key");
   });

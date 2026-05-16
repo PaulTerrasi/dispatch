@@ -425,7 +425,18 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
   list.className = "run-event-detail-list";
   for (const row of rows) {
     const li = document.createElement("li");
-    const title = pickString(row, "title") ?? pickString(row, "name") ?? pickString(row, "value");
+    // Only "named" shapes (RSS entries, sources, items) get the
+    // title-plus-subtitle layout. Other dicts (feedback events, etc.)
+    // would lose information under that heuristic, so render them as JSON.
+    const title = pickString(row, "title") ?? pickString(row, "name");
+    if (!title) {
+      const pre = document.createElement("pre");
+      pre.className = "run-event-detail-pre";
+      pre.textContent = JSON.stringify(row, null, 2);
+      li.appendChild(pre);
+      list.appendChild(li);
+      continue;
+    }
     const url = pickString(row, "url") ?? pickString(row, "link");
     const sub =
       pickString(row, "source") ??
@@ -435,8 +446,6 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
       pickString(row, "ts");
 
     const safeUrl = url && /^https?:/i.test(url) ? url : undefined;
-    const fallback = JSON.stringify(row);
-    const label = title ?? sub ?? (fallback.length > 200 ? fallback.slice(0, 200) + "…" : fallback);
     const rowTitle = document.createElement("div");
     rowTitle.className = "run-event-detail-row-title";
     if (safeUrl) {
@@ -444,13 +453,13 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
       a.href = safeUrl;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.textContent = label;
+      a.textContent = title;
       rowTitle.appendChild(a);
     } else {
-      rowTitle.textContent = label;
+      rowTitle.textContent = title;
     }
     li.appendChild(rowTitle);
-    if (title && sub) {
+    if (sub) {
       const s = document.createElement("div");
       s.className = "run-event-detail-row-sub";
       s.textContent = sub;
