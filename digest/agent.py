@@ -86,6 +86,10 @@ class RunState:
     ) -> None:
         thinking = self.pending_thinking
         self.pending_thinking = None
+        # Drop arg keys whose values are blob-shaped (raw HTML, diffs, large
+        # text bodies). The full content is re-logged under `details` for the
+        # tools that need it; keeping it in `args` too would double-write to S3
+        # and clutter the run-detail UI.
         entry: dict[str, Any] = {
             "ts": datetime.now(UTC).isoformat(),
             "tool": name,
