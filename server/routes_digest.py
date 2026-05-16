@@ -332,6 +332,7 @@ def get_run(store: StoreDep, run_id: str) -> RunDetail:
         # strip the legacy key so it doesn't ride along as an unknown field.
         if (
             isinstance(e, dict)
+            and e.get("tool") == "read_profile"
             and not e.get("details")
             and isinstance(e.get("profile_snapshot"), str)
         ):
