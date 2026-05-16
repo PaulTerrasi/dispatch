@@ -651,8 +651,8 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             {"item_id": item_id},
             f"matched run {match.get('run_id', '?')}",
             details={
-                "matched_run_id": match.get("run_id"),
                 "text": text[:20_000],
+                **({"matched_run_id": match["run_id"]} if match.get("run_id") else {}),
                 **({"profile_snapshot": snapshot[:5_000]} if snapshot else {}),
             },
         )
