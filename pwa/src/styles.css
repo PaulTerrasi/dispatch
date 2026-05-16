@@ -655,8 +655,11 @@ body.chat-page {
      the chat appear to scroll off-screen. A fixed body cannot be panned by
      that behavior. */
   position: fixed;
-  inset: 0;
-  width: 100%;
+  /* Only three sides are load-bearing — `height` (below) wins over an
+     implied `bottom: 0`, so spell out the constraints we actually rely on. */
+  top: 0;
+  left: 0;
+  right: 0;
   height: var(--viewport-h, 100dvh);
   /* The base `body { min-height: 100vh }` rule would otherwise win when the
      keyboard shrinks `--viewport-h` below `100vh`, leaving body taller than
