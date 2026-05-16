@@ -97,9 +97,11 @@ def test_nearest_line_hint_omitted_when_needle_too_short():
 
 
 def test_nearest_line_hint_omitted_when_needle_is_only_newlines():
-    """`"\\n".splitlines()` is `[]` — must not crash with IndexError."""
+    """A newline-only `find` has an empty first line (`"\\n".splitlines()`
+    is `['']`), so the hint is skipped via the `len(first) < 4` short-circuit
+    regardless. Confirm the function raises cleanly without crashing."""
     # Newline-only finds aren't unique (profile has many newlines), so this
-    # exercises the not-unique path; just confirm it raises cleanly.
+    # exercises the not-unique path.
     with pytest.raises(EditError):
         edit_profile("a\nb\n", "\n", "")
 
