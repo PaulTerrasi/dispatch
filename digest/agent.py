@@ -384,7 +384,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "read_recent_feedback",
             {"days": days},
             outcome,
-            details={"prior_events": prior, "triggering_event": trigger},
+            details={"prior_events": prior[-50:], "triggering_event": trigger},
         )
         return {"content": [{"type": "text", "text": text}]}
 
