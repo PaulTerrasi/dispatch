@@ -309,7 +309,13 @@ def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             "submit_digest",
             {"count": len(items_out)},
             "ok",
-            details={"items": items_out, "agent_notes": notes},
+            details={
+                "items": [
+                    {k: v for k, v in i.items() if k not in ("feedback", "run_id")}
+                    for i in items_out
+                ],
+                "agent_notes": notes,
+            },
         )
         return {
             "content": [
