@@ -112,10 +112,10 @@ def _stable_id(url: str, title: str) -> str:
 
 
 def _truncate_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Cap any string field on a fetched feed entry before stashing it in
-    `details`. Today only `summary` is large enough to matter, but capping
-    every string value keeps the function correct if `FeedEntry.as_dict()`
-    ever gains a field like `content` or `description`."""
+    """Cap any string field on a flat dict before stashing it in `details`.
+    Used for both `FeedEntry.as_dict()` results and feedback-event dicts —
+    both happen to be flat string-valued today. Bounds the run record when
+    a value (typically an HTML summary) is unexpectedly long."""
     return {
         k: (v[:2_000] if isinstance(v, str) and len(v) > 2_000 else v) for k, v in entry.items()
     }
@@ -591,7 +591,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
             # Don't persist `text` — it's a rendered summary that can grow
             # large, and the individual runs are already addressable by id
             # through the run-detail view.
-            details={"run_ids": [r["run_id"] for r in runs if r.get("run_id")]},
+            details={"run_ids": [r["run_id"] for r in runs if "run_id" in r]},
         )
         return {"content": [{"type": "text", "text": text}]}
 

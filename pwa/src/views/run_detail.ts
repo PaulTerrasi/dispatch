@@ -437,19 +437,19 @@ function renderObjectList(rows: Record<string, unknown>[]): HTMLElement {
     const safeUrl = url && /^https?:/i.test(url) ? url : undefined;
     const fallback = JSON.stringify(row);
     const label = title ?? sub ?? (fallback.length > 200 ? fallback.slice(0, 200) + "…" : fallback);
-    const row_title = document.createElement("div");
-    row_title.className = "run-event-detail-row-title";
+    const rowTitle = document.createElement("div");
+    rowTitle.className = "run-event-detail-row-title";
     if (safeUrl) {
       const a = document.createElement("a");
       a.href = safeUrl;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
       a.textContent = label;
-      row_title.appendChild(a);
+      rowTitle.appendChild(a);
     } else {
-      row_title.textContent = label;
+      rowTitle.textContent = label;
     }
-    li.appendChild(row_title);
+    li.appendChild(rowTitle);
     if (title && sub) {
       const s = document.createElement("div");
       s.className = "run-event-detail-row-sub";
