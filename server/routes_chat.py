@@ -287,11 +287,16 @@ async def _stream_agent(store: StoreProtocol, history: list[ChatTurn]) -> AsyncI
             )
         except Exception as e:
             if state_flags["result_seen"]:
-                # Known CLI bug: after the agent emits a successful
-                # ResultMessage the Node CLI subprocess sometimes exits with
-                # code 1, surfacing here as `Command failed with exit code 1`.
-                # The conversation already completed cleanly — emit `done`
-                # so the client closes the stream normally.
+                # Intentionally broad: ANY exception after a successful
+                # ResultMessage is swallowed. The motivating case is the
+                # Node CLI's habit of exiting with code 1 post-completion
+                # (surfacing as `Command failed with exit code 1`), but
+                # this also covers future cleanup/generator-shutdown bugs
+                # in the same window. Trade-off: a regression introduced
+                # in that window would present as a clean `done` instead
+                # of a user-visible error. The info log below keeps it
+                # observable in CloudWatch — don't narrow this catch
+                # without first checking those entries.
                 log.info(
                     "chat.post_result_cli_exit_suppressed",
                     error_type=type(e).__name__,
