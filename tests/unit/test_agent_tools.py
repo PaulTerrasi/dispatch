@@ -280,6 +280,27 @@ async def test_reflection_edit_profile_rejects_missing_find(store: Store) -> Non
 
 
 @pytest.mark.asyncio
+async def test_reflection_edit_profile_rejects_empty_find(store: Store) -> None:
+    state = _state(store)
+    build_reflection_tools(state)
+    out = await state.current_tools["edit_profile"]({"find": "", "replace": "x"})
+    assert out.get("isError") is True
+    assert "empty" in out["content"][0]["text"]
+    assert state.profile_patches_applied == 0
+
+
+@pytest.mark.asyncio
+async def test_reflection_edit_profile_rejects_non_unique_find(store: Store) -> None:
+    state = _state(store)
+    store.write_profile("- a\n- a\n- b\n")
+    build_reflection_tools(state)
+    out = await state.current_tools["edit_profile"]({"find": "- a", "replace": "- A"})
+    assert out.get("isError") is True
+    assert "appears" in out["content"][0]["text"]
+    assert state.profile_patches_applied == 0
+
+
+@pytest.mark.asyncio
 async def test_reflection_add_source_rejects_invalid_kind(store: Store) -> None:
     state = _state(store)
     build_reflection_tools(state)

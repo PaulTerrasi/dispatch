@@ -76,7 +76,10 @@ def _nearest_line_hint(text: str, needle: str) -> str:
     an existing block — surfacing the live version of its first line is
     usually enough to unblock them without another read_profile.
     """
-    first = needle.splitlines()[0] if needle else ""
+    # `"\n".splitlines()` is `[]`, so guard against an empty list even when
+    # `needle` is truthy.
+    lines = needle.splitlines()
+    first = lines[0] if lines else ""
     if len(first) < 4:
         return ""
     best_i = 0

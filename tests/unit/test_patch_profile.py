@@ -69,6 +69,22 @@ def test_preserves_trailing_newline_state():
     assert edit_profile("a\nb\n", "b\n", "B\n") == "a\nB\n"
 
 
+def test_nearest_line_hint_omitted_when_needle_too_short():
+    """Short `find` strings (<4 chars on first line) shouldn't trigger the
+    hint — the prefix-overlap heuristic would be too noisy to be useful."""
+    with pytest.raises(EditError) as exc:
+        edit_profile("alpha bravo charlie\n", "abc", "x")
+    assert "closest live line" not in str(exc.value)
+
+
+def test_nearest_line_hint_omitted_when_needle_is_only_newlines():
+    """`"\\n".splitlines()` is `[]` — must not crash with IndexError."""
+    # Newline-only finds aren't unique (profile has many newlines), so this
+    # exercises the not-unique path; just confirm it raises cleanly.
+    with pytest.raises(EditError):
+        edit_profile("a\nb\n", "\n", "")
+
+
 def test_whitespace_inside_find_is_preserved():
     """Whitespace inside the find string is matched verbatim — but pure
     substring semantics mean indentation in front of the match is fine,
