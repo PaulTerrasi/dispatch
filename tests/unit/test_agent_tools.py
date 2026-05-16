@@ -271,10 +271,12 @@ async def test_submit_digest_defaults_type_to_article(store: Store) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reflection_patch_profile_rejects_bad_diff(store: Store) -> None:
+async def test_reflection_edit_profile_rejects_missing_find(store: Store) -> None:
     state = _state(store)
     build_reflection_tools(state)
-    out = await state.current_tools["patch_profile"]({"diff": "garbage"})
+    out = await state.current_tools["edit_profile"](
+        {"find": "nope-not-in-profile", "replace": "x"}
+    )
     assert out.get("isError") is True
     assert state.profile_patches_applied == 0
 
@@ -552,7 +554,7 @@ def test_chat_options_uses_partial_messages(store: Store) -> None:
 
 @pytest.mark.asyncio
 async def test_talk_tools_read_only_methods_are_unwrapped(store: Store) -> None:
-    """Only patch_profile/add_source/remove_source are wrapped; reads are passthrough."""
+    """Only edit_profile/add_source/remove_source are wrapped; reads are passthrough."""
     state = _state(store)
     q: asyncio.Queue[str] = asyncio.Queue()
     build_chat_tools(state, q)

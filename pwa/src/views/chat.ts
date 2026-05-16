@@ -524,7 +524,7 @@ function renderChatHeader(): { bar: HTMLElement; profileToggleBtn: HTMLButtonEle
 
 function prettyToolStart(name: string, _input: unknown): string {
   switch (name) {
-    case "patch_profile":
+    case "edit_profile":
       return "editing profile.md";
     case "add_source":
       return "adding source";
@@ -549,7 +549,7 @@ function prettyToolStart(name: string, _input: unknown): string {
 
 function toolIcon(name: string): string {
   switch (name) {
-    case "patch_profile":
+    case "edit_profile":
       return "✏️";
     case "add_source":
       return "➕";

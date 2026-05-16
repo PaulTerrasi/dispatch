@@ -57,9 +57,15 @@ better digest, or sharpens it for tomorrow?"*
 3. **You may rewrite, not just append.** Sharpen language. Retire stale
    interests. Reorganize sections if it helps the trigger-driven change
    land cleanly.
-4. **Each `patch_profile` call must apply cleanly.** Use unified-diff
-   format with a few lines of surrounding context. If a patch is
-   rejected, revise and retry — do not give up silently.
+4. **Each `edit_profile` call must apply cleanly.** Call `read_profile`
+   immediately before so your `find` text is verbatim from the live
+   profile — every space, dash, and newline must match. `find` must be
+   unique in the file; include enough surrounding lines to make it so.
+   To append: include the last few existing lines in `find` and
+   reproduce them in `replace` followed by the new content. To delete:
+   pass `replace=""`. If an edit is rejected, the error tells you why
+   (not found vs. not unique) — revise and retry, don't give up
+   silently.
 5. **No edits is a valid answer.** A single thumb is often noise; wait
    for a pattern. Note the watch-pattern in reflection memory.
 

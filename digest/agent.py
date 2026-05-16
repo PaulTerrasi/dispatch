@@ -26,7 +26,7 @@ from claude_agent_sdk import (
     tool,
 )
 
-from digest.patch import PatchError, apply_unified_diff
+from digest.patch import EditError, edit_profile
 from digest.store_protocol import StoreProtocol
 from digest.tools.rss import fetch_rss
 from digest.tools.web_fetch import web_fetch
@@ -283,8 +283,8 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
 
     RunState side-effects (closure-captured `state`):
       - every tool: appends to `state.tool_log` via `state.record()`.
-      - patch_profile: increments `state.profile_patches_applied` and writes
-        `state.store.write_profile()` if the diff applies cleanly.
+      - edit_profile: increments `state.profile_patches_applied` and writes
+        `state.store.write_profile()` if the find/replace is unique.
       - add_source / remove_source: increments `state.sources_changed` and
         writes `state.store.write_sources()`.
       - end_reflection: writes `state.reflection_notes`.
@@ -420,25 +420,32 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         return {"content": [{"type": "text", "text": f"removed {kind} source: {value}"}]}
 
     @tool(
-        "patch_profile",
-        "Apply a unified diff to profile.md. Returns an error message if the "
-        "diff doesn't apply cleanly so you can revise and retry.",
-        {"diff": str},
+        "edit_profile",
+        "Edit profile.md by replacing a unique substring. `find` must match "
+        "exactly one place in the current profile (verbatim — every space, "
+        "dash, and newline). `replace` is what goes in its place; pass an "
+        "empty string to delete. To append, include the last few existing "
+        "lines in `find` and reproduce them in `replace` plus the new "
+        "content. Always call read_profile immediately before this so "
+        "`find` is taken from the live text. Errors explain what to fix; "
+        "revise and retry.",
+        {"find": str, "replace": str},
     )
-    async def _patch_profile(args: dict[str, Any]) -> dict[str, Any]:
-        diff = str(args.get("diff") or "")
+    async def _edit_profile(args: dict[str, Any]) -> dict[str, Any]:
+        find = str(args.get("find") or "")
+        replace = str(args.get("replace") or "")
         original = state.store.read_profile()
         try:
-            patched = apply_unified_diff(original, diff)
-        except PatchError as e:
-            state.record("patch_profile", {}, f"rejected: {e}")
+            updated = edit_profile(original, find, replace)
+        except EditError as e:
+            state.record("edit_profile", {}, f"rejected: {e}")
             return {
-                "content": [{"type": "text", "text": f"patch rejected: {e}"}],
+                "content": [{"type": "text", "text": f"edit rejected: {e}"}],
                 "isError": True,
             }
-        state.store.write_profile(patched)
+        state.store.write_profile(updated)
         state.profile_patches_applied += 1
-        state.record("patch_profile", {}, "applied")
+        state.record("edit_profile", {}, "applied")
         return {"content": [{"type": "text", "text": "profile.md updated."}]}
 
     @tool(
@@ -586,7 +593,7 @@ def build_reflection_tools(state: RunState) -> list[SdkMcpTool[Any]]:
         _list_sources,
         _add_source,
         _remove_source,
-        _patch_profile,
+        _edit_profile,
         _end_reflection,
     ]
     state.current_tools = {t.name: t.handler for t in tools}
@@ -775,7 +782,7 @@ def reflection_options(state: RunState, *, max_turns: int = 20) -> ClaudeAgentOp
             "mcp__digest__list_sources",
             "mcp__digest__add_source",
             "mcp__digest__remove_source",
-            "mcp__digest__patch_profile",
+            "mcp__digest__edit_profile",
             "mcp__digest__end_reflection",
         ],
         max_turns=max_turns,
@@ -795,7 +802,7 @@ def build_chat_tools(
     """
     base = build_reflection_tools(state)
     by_name = {t.name: t for t in base}
-    write_tools = {"patch_profile", "add_source", "remove_source"}
+    write_tools = {"edit_profile", "add_source", "remove_source"}
 
     def _wrap_write(orig: SdkMcpTool[Any]) -> SdkMcpTool[Any]:
         original_handler = orig.handler
@@ -870,7 +877,7 @@ def chat_options(
             "mcp__digest__list_sources",
             "mcp__digest__add_source",
             "mcp__digest__remove_source",
-            "mcp__digest__patch_profile",
+            "mcp__digest__edit_profile",
             "mcp__digest__end_reflection",
         ],
         max_turns=max_turns,
