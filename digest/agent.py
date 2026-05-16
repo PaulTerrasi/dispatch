@@ -112,7 +112,9 @@ def _truncate_entry(entry: dict[str, Any]) -> dict[str, Any]:
     `details`. Today only `summary` is large enough to matter, but capping
     every string value keeps the function correct if `FeedEntry.as_dict()`
     ever gains a field like `content` or `description`."""
-    return {k: (v[:2_000] if isinstance(v, str) and len(v) > 2_000 else v) for k, v in entry.items()}
+    return {
+        k: (v[:2_000] if isinstance(v, str) and len(v) > 2_000 else v) for k, v in entry.items()
+    }
 
 
 def build_curation_tools(state: RunState) -> list[SdkMcpTool[Any]]:
