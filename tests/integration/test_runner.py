@@ -457,13 +457,15 @@ async def test_reflection_read_recent_feedback_filters_to_pre_trigger(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
+    today = date.today()
+    d = today.isoformat()
     # Three events: one before, one trigger, one after.
-    store.append_feedback({"ts": "2026-05-10T10:00:00+00:00", "kind": "chat", "text": "earlier"})
-    store.append_feedback({"ts": "2026-05-10T11:00:00+00:00", "kind": "chat", "text": "trigger"})
-    store.append_feedback({"ts": "2026-05-10T12:00:00+00:00", "kind": "chat", "text": "later"})
+    store.append_feedback({"ts": f"{d}T10:00:00+00:00", "kind": "chat", "text": "earlier"})
+    store.append_feedback({"ts": f"{d}T11:00:00+00:00", "kind": "chat", "text": "trigger"})
+    store.append_feedback({"ts": f"{d}T12:00:00+00:00", "kind": "chat", "text": "later"})
 
-    trigger = {"ts": "2026-05-10T11:00:00+00:00", "kind": "chat", "text": "trigger"}
-    state = RunState(store=store, today=date(2026, 5, 10))
+    trigger = {"ts": f"{d}T11:00:00+00:00", "kind": "chat", "text": "trigger"}
+    state = RunState(store=store, today=today)
     state.triggering_event = trigger
     build_reflection_tools(state)
 
@@ -485,23 +487,25 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
+    today = date.today()
+    d = today.isoformat()
     # Seed a curation run that surfaced item 'abc12345' with a captured snapshot.
     store.append_run(
         {
             "run_id": "cur1",
             "kind": "curation",
-            "started_at": "2026-05-10T08:00:00+00:00",
+            "started_at": f"{d}T08:00:00+00:00",
             "submitted_item_ids": ["abc12345", "other001"],
             "tool_log": [
                 {
-                    "ts": "2026-05-10T08:00:01+00:00",
+                    "ts": f"{d}T08:00:01+00:00",
                     "tool": "read_profile",
                     "args": {},
                     "outcome": "123 chars",
                     "profile_snapshot": "# Profile\n- LLMs and woodworking\n",
                 },
                 {
-                    "ts": "2026-05-10T08:00:30+00:00",
+                    "ts": f"{d}T08:00:30+00:00",
                     "tool": "submit_digest",
                     "args": {"count": 2},
                     "outcome": "ok",
@@ -511,12 +515,12 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
     )
 
     trigger = {
-        "ts": "2026-05-10T11:00:00+00:00",
+        "ts": f"{d}T11:00:00+00:00",
         "kind": "thumb",
         "value": "down",
         "item_id": "abc12345",
     }
-    state = RunState(store=store, today=date(2026, 5, 10))
+    state = RunState(store=store, today=today)
     state.triggering_event = trigger
     build_reflection_tools(state)
 
@@ -538,19 +542,21 @@ async def test_read_triggering_curation_run_uses_top_level_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
+    today = date.today()
+    d = today.isoformat()
     store.append_run(
         {
             "run_id": "cur2",
             "kind": "curation",
-            "started_at": "2026-05-10T08:00:00+00:00",
+            "started_at": f"{d}T08:00:00+00:00",
             "submitted_item_ids": ["xyz98765"],
             "profile_snapshot": "# Profile\n- top-level snapshot path\n",
             "tool_log": [],
         }
     )
-    state = RunState(store=store, today=date(2026, 5, 10))
+    state = RunState(store=store, today=today)
     state.triggering_event = {
-        "ts": "2026-05-10T11:00:00+00:00",
+        "ts": f"{d}T11:00:00+00:00",
         "kind": "thumb",
         "value": "down",
         "item_id": "xyz98765",
@@ -570,15 +576,17 @@ async def test_read_triggering_curation_run_legacy_run_without_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
+    today = date.today()
+    d = today.isoformat()
     store.append_run(
         {
             "run_id": "legacy",
             "kind": "curation",
-            "started_at": "2026-05-10T08:00:00+00:00",
+            "started_at": f"{d}T08:00:00+00:00",
             "submitted_item_ids": ["abc12345"],
             "tool_log": [
                 {
-                    "ts": "2026-05-10T08:00:01+00:00",
+                    "ts": f"{d}T08:00:01+00:00",
                     "tool": "read_profile",
                     "args": {},
                     "outcome": "100 chars",
@@ -587,12 +595,12 @@ async def test_read_triggering_curation_run_legacy_run_without_snapshot(
         }
     )
     trigger = {
-        "ts": "2026-05-10T11:00:00+00:00",
+        "ts": f"{d}T11:00:00+00:00",
         "kind": "thumb",
         "value": "down",
         "item_id": "abc12345",
     }
-    state = RunState(store=store, today=date(2026, 5, 10))
+    state = RunState(store=store, today=today)
     state.triggering_event = trigger
     build_reflection_tools(state)
 
