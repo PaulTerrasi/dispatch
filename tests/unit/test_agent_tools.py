@@ -499,6 +499,17 @@ def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
     assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
 
 
+def test_curation_options_cleanup_removes_spilled_prompt_dir(store: Store) -> None:
+    state = _state(store)
+    opts = curation_options(state)
+    assert isinstance(opts.system_prompt, dict)
+    prompt_path = Path(opts.system_prompt["path"])
+    assert prompt_path.exists()
+    state.cleanup_temp_dirs()
+    assert not prompt_path.exists()
+    assert not prompt_path.parent.exists()
+
+
 def test_fill_template_does_not_bleed_values_into_each_other(store: Store) -> None:
     """If a value contains another placeholder, it must NOT get expanded —
     single-pass substitution prevents user-controlled profile text from

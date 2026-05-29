@@ -76,6 +76,15 @@ class RunState:
     pending_thinking: str | None = None
     # Reflection-only: the feedback event that triggered this run, if any.
     triggering_event: dict[str, Any] | None = None
+    # Temp dirs created to spill the system prompt past argv's ARG_MAX limit
+    # (see curation_options). Cleaned up by the runner in `finally`.
+    _temp_dirs: list[Path] = field(default_factory=list)
+
+    def cleanup_temp_dirs(self) -> None:
+        import shutil
+
+        while self._temp_dirs:
+            shutil.rmtree(self._temp_dirs.pop(), ignore_errors=True)
 
     def record(
         self,
@@ -892,8 +901,12 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
     # bundled `claude` CLI. The baked-in PROFILE + RECENT_DIGESTS context can
     # push argv past Linux's ARG_MAX (~128 KB), causing execve to fail with
     # E2BIG. Spill the prompt to a file and let the SDK use --system-prompt-file
-    # instead so the payload travels through the filesystem, not argv.
-    prompt_path = Path(tempfile.mkdtemp(prefix="digest-curation-")) / "system.md"
+    # instead so the payload travels through the filesystem, not argv. The
+    # dir is recorded on state so runner.run_once() can rm it after the agent
+    # finishes — the file must outlive this call (SDK reads it lazily).
+    prompt_dir = Path(tempfile.mkdtemp(prefix="digest-curation-"))
+    state._temp_dirs.append(prompt_dir)
+    prompt_path = prompt_dir / "system.md"
     prompt_path.write_text(system, encoding="utf-8")
     return ClaudeAgentOptions(
         system_prompt={"type": "file", "path": str(prompt_path)},
