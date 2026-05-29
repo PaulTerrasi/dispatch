@@ -485,18 +485,21 @@ def test_compact_curation_runs_includes_thinking_and_strips_large_args() -> None
 
 def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
     state = _state(store)
-    opts = curation_options(state)
-    assert state.curation_system_prompt
-    # Spilled to a file so the rendered prompt (which can be large enough to
-    # blow past ARG_MAX) doesn't ride on the CLI argv.
-    assert isinstance(opts.system_prompt, dict)
-    assert opts.system_prompt["type"] == "file"
-    assert Path(opts.system_prompt["path"]).read_text() == state.curation_system_prompt
-    assert "mcp__digest__submit_digest" in opts.allowed_tools
-    # Read tools are now baked into the system prompt, not exposed as tools.
-    assert "mcp__digest__read_profile" not in opts.allowed_tools
-    assert "mcp__digest__read_recent_feedback" not in opts.allowed_tools
-    assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
+    try:
+        opts = curation_options(state)
+        assert state.curation_system_prompt
+        # Spilled to a file so the rendered prompt (which can be large enough to
+        # blow past ARG_MAX) doesn't ride on the CLI argv.
+        assert isinstance(opts.system_prompt, dict)
+        assert opts.system_prompt["type"] == "file"
+        assert Path(opts.system_prompt["path"]).read_text() == state.curation_system_prompt
+        assert "mcp__digest__submit_digest" in opts.allowed_tools
+        # Read tools are now baked into the system prompt, not exposed as tools.
+        assert "mcp__digest__read_profile" not in opts.allowed_tools
+        assert "mcp__digest__read_recent_feedback" not in opts.allowed_tools
+        assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
+    finally:
+        state.cleanup_temp_dirs()
 
 
 def test_curation_options_cleanup_removes_spilled_prompt_dir(store: Store) -> None:
@@ -582,15 +585,18 @@ def test_curation_options_injects_profile_and_recent_digests(store: Store) -> No
         "",
     )
     state = RunState(store=store, today=today, run_id="rid")
-    opts = curation_options(state)
-    rendered = Path(opts.system_prompt["path"]).read_text()
-    assert "LLMs and woodworking" in rendered
-    assert "A great post" in rendered
-    assert "src.com" in rendered
-    assert "up" in rendered
-    assert state.profile_snapshot.startswith("# Profile")
-    assert "{{PROFILE}}" not in rendered
-    assert "{{RECENT_DIGESTS}}" not in rendered
+    try:
+        opts = curation_options(state)
+        rendered = Path(opts.system_prompt["path"]).read_text()
+        assert "LLMs and woodworking" in rendered
+        assert "A great post" in rendered
+        assert "src.com" in rendered
+        assert "up" in rendered
+        assert state.profile_snapshot.startswith("# Profile")
+        assert "{{PROFILE}}" not in rendered
+        assert "{{RECENT_DIGESTS}}" not in rendered
+    finally:
+        state.cleanup_temp_dirs()
 
 
 def test_reflection_options_captures_system_prompt(store: Store) -> None:

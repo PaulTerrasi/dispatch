@@ -903,6 +903,9 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
     # instead so the payload travels through the filesystem, not argv. The
     # dir is recorded on state so _run_curation() can rm it after the agent
     # finishes — the file must outlive this call (SDK reads it lazily).
+    # SDK contract: claude_agent_sdk/_internal/transport/subprocess_cli.py
+    # branches on system_prompt["type"] == "file" and emits
+    # `--system-prompt-file <path>` (introduced in v0.1.71, our floor pin).
     prompt_dir = Path(tempfile.mkdtemp(prefix="digest-curation-"))
     state._temp_dirs.append(prompt_dir)
     prompt_path = prompt_dir / "system.md"
