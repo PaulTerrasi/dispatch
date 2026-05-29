@@ -7,7 +7,7 @@ We instead drive our tools in a deterministic order and assert on side effects.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -457,7 +457,7 @@ async def test_reflection_read_recent_feedback_filters_to_pre_trigger(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
-    today = date.today()
+    today = datetime.now(UTC).date()
     d = today.isoformat()
     # Three events: one before, one trigger, one after.
     store.append_feedback({"ts": f"{d}T10:00:00+00:00", "kind": "chat", "text": "earlier"})
@@ -487,7 +487,7 @@ async def test_read_triggering_curation_run_returns_run_and_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
-    today = date.today()
+    today = datetime.now(UTC).date()
     d = today.isoformat()
     # Seed a curation run that surfaced item 'abc12345' with a captured snapshot.
     store.append_run(
@@ -542,7 +542,7 @@ async def test_read_triggering_curation_run_uses_top_level_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
-    today = date.today()
+    today = datetime.now(UTC).date()
     d = today.isoformat()
     store.append_run(
         {
@@ -576,7 +576,7 @@ async def test_read_triggering_curation_run_legacy_run_without_snapshot(
 
     store = Store(tmp_data_dir)
     store.ensure_layout()
-    today = date.today()
+    today = datetime.now(UTC).date()
     d = today.isoformat()
     store.append_run(
         {

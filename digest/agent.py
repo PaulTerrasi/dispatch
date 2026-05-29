@@ -902,7 +902,7 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
     # push argv past Linux's ARG_MAX (~128 KB), causing execve to fail with
     # E2BIG. Spill the prompt to a file and let the SDK use --system-prompt-file
     # instead so the payload travels through the filesystem, not argv. The
-    # dir is recorded on state so runner.run_once() can rm it after the agent
+    # dir is recorded on state so _run_curation() can rm it after the agent
     # finishes — the file must outlive this call (SDK reads it lazily).
     prompt_dir = Path(tempfile.mkdtemp(prefix="digest-curation-"))
     state._temp_dirs.append(prompt_dir)
