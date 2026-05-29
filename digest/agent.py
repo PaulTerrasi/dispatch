@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import re
+import shutil
 import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -81,8 +82,6 @@ class RunState:
     _temp_dirs: list[Path] = field(default_factory=list)
 
     def cleanup_temp_dirs(self) -> None:
-        import shutil
-
         while self._temp_dirs:
             shutil.rmtree(self._temp_dirs.pop(), ignore_errors=True)
 
