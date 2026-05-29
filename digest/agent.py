@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import re
+import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -887,8 +888,15 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
         version="0.1.0",
         tools=build_curation_tools(state),
     )
+    # The Claude Agent SDK passes `--system-prompt` as an argv value to the
+    # bundled `claude` CLI. The baked-in PROFILE + RECENT_DIGESTS context can
+    # push argv past Linux's ARG_MAX (~128 KB), causing execve to fail with
+    # E2BIG. Spill the prompt to a file and let the SDK use --system-prompt-file
+    # instead so the payload travels through the filesystem, not argv.
+    prompt_path = Path(tempfile.mkdtemp(prefix="digest-curation-")) / "system.md"
+    prompt_path.write_text(system, encoding="utf-8")
     return ClaudeAgentOptions(
-        system_prompt=system,
+        system_prompt={"type": "file", "path": str(prompt_path)},
         mcp_servers={"digest": server},
         allowed_tools=[
             "mcp__digest__list_sources",
