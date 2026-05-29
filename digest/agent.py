@@ -79,7 +79,7 @@ class RunState:
     triggering_event: dict[str, Any] | None = None
     # Temp dirs created to spill the system prompt past argv's ARG_MAX limit
     # (see curation_options). Cleaned up by the runner in `finally`.
-    _temp_dirs: list[Path] = field(default_factory=list)
+    _temp_dirs: list[Path] = field(default_factory=list, repr=False, compare=False)
 
     def cleanup_temp_dirs(self) -> None:
         while self._temp_dirs:

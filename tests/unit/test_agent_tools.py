@@ -504,13 +504,16 @@ def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
 
 def test_curation_options_cleanup_removes_spilled_prompt_dir(store: Store) -> None:
     state = _state(store)
-    opts = curation_options(state)
-    assert isinstance(opts.system_prompt, dict)
-    prompt_path = Path(opts.system_prompt["path"])
-    assert prompt_path.exists()
-    state.cleanup_temp_dirs()
-    assert not prompt_path.exists()
-    assert not prompt_path.parent.exists()
+    try:
+        opts = curation_options(state)
+        assert isinstance(opts.system_prompt, dict)
+        prompt_path = Path(opts.system_prompt["path"])
+        assert prompt_path.exists()
+        state.cleanup_temp_dirs()
+        assert not prompt_path.exists()
+        assert not prompt_path.parent.exists()
+    finally:
+        state.cleanup_temp_dirs()
 
 
 def test_fill_template_does_not_bleed_values_into_each_other(store: Store) -> None:
