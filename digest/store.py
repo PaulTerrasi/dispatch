@@ -213,6 +213,11 @@ class Store:
             f.write(json.dumps(event) + "\n")
 
     def read_recent_feedback(self, days: int = 30) -> list[dict[str, Any]]:
+        # Anchored to wall time, not RunState.today: feedback windows reflect
+        # what the user has actually said recently, independent of any
+        # historical date a caller might be simulating. Tests that seed
+        # fixtures must use real dates (or date.today()) — a hardcoded past
+        # date will silently fall outside the window once wall time drifts.
         cutoff = datetime.now(UTC).date() - timedelta(days=days)
         out: list[dict[str, Any]] = []
         if not self.feedback_dir.exists():
@@ -247,6 +252,8 @@ class Store:
             f.write(json.dumps(run) + "\n")
 
     def read_recent_runs(self, days: int = 30) -> list[dict[str, Any]]:
+        # Wall-time anchored — see read_recent_feedback for the rationale and
+        # the test-fixture gotcha.
         cutoff = datetime.now(UTC).date() - timedelta(days=days)
         out: list[dict[str, Any]] = []
         if not self.runs_dir.exists():

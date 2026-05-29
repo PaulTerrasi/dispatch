@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -484,14 +485,35 @@ def test_compact_curation_runs_includes_thinking_and_strips_large_args() -> None
 
 def test_curation_options_captures_system_prompt_in_state(store: Store) -> None:
     state = _state(store)
-    opts = curation_options(state)
-    assert state.curation_system_prompt
-    assert opts.system_prompt == state.curation_system_prompt
-    assert "mcp__digest__submit_digest" in opts.allowed_tools
-    # Read tools are now baked into the system prompt, not exposed as tools.
-    assert "mcp__digest__read_profile" not in opts.allowed_tools
-    assert "mcp__digest__read_recent_feedback" not in opts.allowed_tools
-    assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
+    try:
+        opts = curation_options(state)
+        assert state.curation_system_prompt
+        # Spilled to a file so the rendered prompt (which can be large enough to
+        # blow past ARG_MAX) doesn't ride on the CLI argv.
+        assert isinstance(opts.system_prompt, dict)
+        assert opts.system_prompt["type"] == "file"
+        assert Path(opts.system_prompt["path"]).read_text() == state.curation_system_prompt
+        assert "mcp__digest__submit_digest" in opts.allowed_tools
+        # Read tools are now baked into the system prompt, not exposed as tools.
+        assert "mcp__digest__read_profile" not in opts.allowed_tools
+        assert "mcp__digest__read_recent_feedback" not in opts.allowed_tools
+        assert "mcp__digest__read_recent_digests" not in opts.allowed_tools
+    finally:
+        state.cleanup_temp_dirs()
+
+
+def test_curation_options_cleanup_removes_spilled_prompt_dir(store: Store) -> None:
+    state = _state(store)
+    try:
+        opts = curation_options(state)
+        assert isinstance(opts.system_prompt, dict)
+        prompt_path = Path(opts.system_prompt["path"])
+        assert prompt_path.exists()
+        state.cleanup_temp_dirs()
+        assert not prompt_path.exists()
+        assert not prompt_path.parent.exists()
+    finally:
+        state.cleanup_temp_dirs()
 
 
 def test_fill_template_does_not_bleed_values_into_each_other(store: Store) -> None:
@@ -566,14 +588,18 @@ def test_curation_options_injects_profile_and_recent_digests(store: Store) -> No
         "",
     )
     state = RunState(store=store, today=today, run_id="rid")
-    opts = curation_options(state)
-    assert "LLMs and woodworking" in opts.system_prompt
-    assert "A great post" in opts.system_prompt
-    assert "src.com" in opts.system_prompt
-    assert "up" in opts.system_prompt
-    assert state.profile_snapshot.startswith("# Profile")
-    assert "{{PROFILE}}" not in opts.system_prompt
-    assert "{{RECENT_DIGESTS}}" not in opts.system_prompt
+    try:
+        opts = curation_options(state)
+        rendered = Path(opts.system_prompt["path"]).read_text()
+        assert "LLMs and woodworking" in rendered
+        assert "A great post" in rendered
+        assert "src.com" in rendered
+        assert "up" in rendered
+        assert state.profile_snapshot.startswith("# Profile")
+        assert "{{PROFILE}}" not in rendered
+        assert "{{RECENT_DIGESTS}}" not in rendered
+    finally:
+        state.cleanup_temp_dirs()
 
 
 def test_reflection_options_captures_system_prompt(store: Store) -> None:
@@ -710,11 +736,12 @@ async def test_read_triggering_curation_run_skips_legacy_runs(store: Store) -> N
     """Legacy curation runs (no `submitted_item_ids` field) can't be matched —
     the recorded args carry only a "count", not the item ids, and there's no
     reverse index. The tool skips such runs and returns the not-found sentinel."""
+    today = datetime.now(UTC).date().isoformat()
     store.append_run(
         {
             "run_id": "old",
             "kind": "curation",
-            "started_at": "2026-05-14T08:00:00+00:00",
+            "started_at": f"{today}T08:00:00+00:00",
             "tool_log": [
                 {"tool": "fetch_rss", "args": {"url": "u"}, "outcome": "ok"},
                 {"tool": "submit_digest", "args": {"count": 1}, "outcome": "ok"},
@@ -723,7 +750,7 @@ async def test_read_triggering_curation_run_skips_legacy_runs(store: Store) -> N
     )
     state = _state(store)
     state.triggering_event = {
-        "ts": "2026-05-14T10:00:00+00:00",
+        "ts": f"{today}T10:00:00+00:00",
         "kind": "thumb",
         "value": "down",
         "item_id": "abc",

@@ -240,8 +240,11 @@ async def reflect_drain(
 
 async def _run_curation(agent: AgentRunner, state: RunState) -> None:
     """Curation phase: agent populates state.submitted_items via tool calls."""
-    opts = curation_options(state)
-    await _capture(agent.run(prompt=_CURATION_PROMPT, options=opts), state)
+    try:
+        opts = curation_options(state)
+        await _capture(agent.run(prompt=_CURATION_PROMPT, options=opts), state)
+    finally:
+        state.cleanup_temp_dirs()
 
 
 async def run_once(

@@ -11,6 +11,8 @@ import asyncio
 import hashlib
 import json
 import re
+import shutil
+import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -75,6 +77,13 @@ class RunState:
     pending_thinking: str | None = None
     # Reflection-only: the feedback event that triggered this run, if any.
     triggering_event: dict[str, Any] | None = None
+    # Temp dirs created to spill the system prompt past argv's ARG_MAX limit
+    # (see curation_options). Cleaned up by the runner in `finally`.
+    _temp_dirs: list[Path] = field(default_factory=list, repr=False, compare=False)
+
+    def cleanup_temp_dirs(self) -> None:
+        while self._temp_dirs:
+            shutil.rmtree(self._temp_dirs.pop(), ignore_errors=True)
 
     def record(
         self,
@@ -887,8 +896,22 @@ def curation_options(state: RunState, *, max_turns: int = 40) -> ClaudeAgentOpti
         version="0.1.0",
         tools=build_curation_tools(state),
     )
+    # The Claude Agent SDK passes `--system-prompt` as an argv value to the
+    # bundled `claude` CLI. The baked-in PROFILE + RECENT_DIGESTS context can
+    # push argv past Linux's ARG_MAX (~128 KB), causing execve to fail with
+    # E2BIG. Spill the prompt to a file and let the SDK use --system-prompt-file
+    # instead so the payload travels through the filesystem, not argv. The
+    # dir is recorded on state so _run_curation() can rm it after the agent
+    # finishes — the file must outlive this call (SDK reads it lazily).
+    # SDK contract: claude_agent_sdk/_internal/transport/subprocess_cli.py
+    # branches on system_prompt["type"] == "file" and emits
+    # `--system-prompt-file <path>` (introduced in v0.1.71, our floor pin).
+    prompt_dir = Path(tempfile.mkdtemp(prefix="digest-curation-"))
+    state._temp_dirs.append(prompt_dir)
+    prompt_path = prompt_dir / "system.md"
+    prompt_path.write_text(system, encoding="utf-8")
     return ClaudeAgentOptions(
-        system_prompt=system,
+        system_prompt={"type": "file", "path": str(prompt_path)},
         mcp_servers={"digest": server},
         allowed_tools=[
             "mcp__digest__list_sources",
