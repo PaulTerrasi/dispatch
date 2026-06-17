@@ -7,6 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from digest import clock
 from digest.store_protocol import StoreProtocol
 from server.deps import get_store
 
@@ -204,9 +205,13 @@ def health() -> dict[str, str]:
 
 
 def _run_date(run: dict[str, Any], fallback: str) -> str:
+    """The run's calendar day (app timezone) derived from its UTC started_at."""
     ts = run.get("started_at")
     if isinstance(ts, str) and len(ts) >= 10:
-        return ts[:10]
+        try:
+            return clock.day_of(ts).isoformat()
+        except ValueError:
+            return ts[:10]
     return fallback
 
 

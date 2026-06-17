@@ -17,6 +17,8 @@ from typing import Any
 
 import yaml
 
+from digest import clock
+
 
 @dataclass(frozen=True)
 class Source:
@@ -138,7 +140,7 @@ class Store:
 
     def recent_digest_items(self, days: int = 7) -> list[dict[str, str]]:
         """Returns recent items as {id, title, source, url, date} for dedup and reflection."""
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         out: list[dict[str, str]] = []
         for d in self.list_digests():
             if d < cutoff:
@@ -205,8 +207,10 @@ class Store:
         return self.feedback_dir / f"{d.isoformat()}.jsonl"
 
     def append_feedback(self, event: dict[str, Any]) -> None:
-        d = date.fromisoformat(event["ts"][:10]) if "ts" in event else datetime.now(UTC).date()
+        # Stamp with the current UTC instant (a caller-supplied ts wins), then
+        # bucket the file by the app-timezone calendar day of that instant.
         event = {"ts": datetime.now(UTC).isoformat(), **event}
+        d = clock.day_of(event["ts"])
         path = self.feedback_path(d)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
@@ -216,9 +220,9 @@ class Store:
         # Anchored to wall time, not RunState.today: feedback windows reflect
         # what the user has actually said recently, independent of any
         # historical date a caller might be simulating. Tests that seed
-        # fixtures must use real dates (or date.today()) — a hardcoded past
+        # fixtures must use real dates (or clock.today()) — a hardcoded past
         # date will silently fall outside the window once wall time drifts.
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         out: list[dict[str, Any]] = []
         if not self.feedback_dir.exists():
             return out
@@ -245,7 +249,7 @@ class Store:
 
     def append_run(self, run: dict[str, Any]) -> None:
         ts = run.get("started_at") or datetime.now(UTC).isoformat()
-        d = date.fromisoformat(ts[:10])
+        d = clock.day_of(ts)
         path = self.runs_path(d)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
@@ -254,7 +258,7 @@ class Store:
     def read_recent_runs(self, days: int = 30) -> list[dict[str, Any]]:
         # Wall-time anchored — see read_recent_feedback for the rationale and
         # the test-fixture gotcha.
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         out: list[dict[str, Any]] = []
         if not self.runs_dir.exists():
             return out

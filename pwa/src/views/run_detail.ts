@@ -1,6 +1,7 @@
 import { api, type DigestItem, type RunDetail, type ToolCallEntry } from "../api";
 import { prettyToolName } from "../tool-names";
 import { renderPageHeader, renderTabBar } from "./_toolbar";
+import { formatDayLong, formatInstantLong } from "../time";
 
 export async function renderRunDetail(params: Record<string, string>): Promise<HTMLElement> {
   const root = document.createElement("div");
@@ -10,8 +11,8 @@ export async function renderRunDetail(params: Record<string, string>): Promise<H
 
   const title = run
     ? run.started_at != null
-      ? formatStarted(run.started_at)
-      : formatDate(run.date)
+      ? formatInstantLong(run.started_at)
+      : formatDayLong(run.date, { year: true })
     : "Run not found";
 
   root.appendChild(renderPageHeader({ title }));
@@ -531,28 +532,6 @@ function renderItem(item: DigestItem): HTMLElement {
   row.appendChild(a);
   row.appendChild(meta);
   return row;
-}
-
-function formatStarted(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function formatDuration(seconds: number): string {

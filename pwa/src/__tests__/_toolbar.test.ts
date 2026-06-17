@@ -1,11 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import {
-  formatTodayLong,
-  renderChrome,
-  renderPageHeader,
-  renderTabBar,
-  renderToolbar,
-} from "../views/_toolbar";
+import { renderChrome, renderPageHeader, renderTabBar, renderToolbar } from "../views/_toolbar";
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -68,15 +62,5 @@ describe("renderToolbar (legacy)", () => {
     document.body.appendChild(renderToolbar("today"));
     expect(document.querySelector(".toolbar strong")?.textContent).toBe("Dispatch");
     expect(document.querySelectorAll(".tabbar-item").length).toBe(4);
-  });
-});
-
-describe("formatTodayLong", () => {
-  it("returns a long date string (weekday, month, day)", () => {
-    const out = formatTodayLong(new Date(2026, 4, 15));
-    // The exact format depends on the runtime locale, but it must contain the
-    // year-independent month name and day number.
-    expect(out).toMatch(/May/);
-    expect(out).toMatch(/15/);
   });
 });

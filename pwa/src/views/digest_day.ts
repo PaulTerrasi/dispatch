@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { renderDigest } from "./today";
 import { renderPageHeader, renderTabBar } from "./_toolbar";
+import { formatDayLong } from "../time";
 
 export async function renderDigestDay(params: Record<string, string>): Promise<HTMLElement> {
   const root = document.createElement("div");
@@ -9,7 +10,7 @@ export async function renderDigestDay(params: Record<string, string>): Promise<H
 
   root.appendChild(
     renderPageHeader({
-      title: formatDate(date),
+      title: formatDayLong(date),
       subtitle:
         digest && digest.items.length
           ? `${digest.items.length} reacted item${digest.items.length === 1 ? "" : "s"}`
@@ -39,13 +40,4 @@ export async function renderDigestDay(params: Record<string, string>): Promise<H
 
   root.appendChild(renderTabBar("archive"));
   return root;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
 }

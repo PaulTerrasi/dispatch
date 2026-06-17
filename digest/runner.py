@@ -16,6 +16,7 @@ from typing import Any
 import structlog
 from claude_agent_sdk import AssistantMessage, ThinkingBlock
 
+from digest import clock
 from digest.agent import (
     AgentRunner,
     RunState,
@@ -141,7 +142,7 @@ async def reflect_now(
 
     Returns the persisted run record, or None on failure.
     """
-    today = datetime.now(UTC).date()
+    today = clock.today()
     run_id = uuid.uuid4().hex[:8]
     started = datetime.now(UTC)
     state = RunState(store=store, today=today, run_id=run_id)
@@ -255,7 +256,7 @@ async def run_once(
     today: date | None = None,
 ) -> RunSummary:
     agent: AgentRunner = runner if runner is not None else SdkAgentRunner()
-    today = today or datetime.now(UTC).date()
+    today = today or clock.today()
     run_id = uuid.uuid4().hex[:8]
     started = datetime.now(UTC)
     log.info("run.start", run_id=run_id, date=today.isoformat())

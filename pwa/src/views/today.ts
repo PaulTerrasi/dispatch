@@ -1,5 +1,6 @@
 import { api, type Digest, type DigestItem, type FeedItem, type ThumbValue } from "../api";
-import { renderPageHeader, renderTabBar, formatTodayLong } from "./_toolbar";
+import { renderPageHeader, renderTabBar } from "./_toolbar";
+import { appTodayLong, dayKeyOf, formatDayLong, formatInstantTime } from "../time";
 
 export async function renderToday(): Promise<HTMLElement> {
   const root = document.createElement("div");
@@ -7,7 +8,7 @@ export async function renderToday(): Promise<HTMLElement> {
   const items = await api.feed();
   root.appendChild(
     renderPageHeader({
-      title: formatTodayLong(),
+      title: appTodayLong(),
       subtitle: subtitleFor(items.length),
     }),
   );
@@ -48,9 +49,13 @@ function renderFeed(items: FeedItem[], onItemRemoved?: () => void): HTMLElement 
   let currentDate = "";
   let currentRun = "";
   for (const item of sorted) {
-    const dateKey = localDateKey(item);
+    // Group by the app-timezone day. Prefer the run instant (the true event
+    // time) resolved into the app timezone, falling back to the digest's own
+    // key. Both agree for digests written after the timezone fix; preferring
+    // the instant also corrects legacy digests keyed under the old UTC date.
+    const dateKey = item.run_started_at ? dayKeyOf(item.run_started_at) : item.digest_date;
     const runKey = item.run_started_at
-      ? `${dateKey}|${new Date(item.run_started_at).getHours()}`
+      ? `${dateKey}|${formatInstantTime(item.run_started_at)}`
       : dateKey;
 
     if (dateKey !== currentDate) {
@@ -58,7 +63,7 @@ function renderFeed(items: FeedItem[], onItemRemoved?: () => void): HTMLElement 
       currentRun = "";
       const dateLine = document.createElement("div");
       dateLine.className = "date-line";
-      dateLine.textContent = formatDate(currentDate);
+      dateLine.textContent = formatDayLong(currentDate);
       dateLine.dataset.dateKey = currentDate;
       wrap.appendChild(dateLine);
     }
@@ -67,9 +72,7 @@ function renderFeed(items: FeedItem[], onItemRemoved?: () => void): HTMLElement 
       if (item.run_started_at) {
         const runLine = document.createElement("div");
         runLine.className = "run-line";
-        runLine.textContent = new Date(item.run_started_at).toLocaleTimeString(undefined, {
-          hour: "numeric",
-        });
+        runLine.textContent = formatInstantTime(item.run_started_at);
         runLine.dataset.dateKey = currentDate;
         runLine.dataset.runKey = currentRun;
         wrap.appendChild(runLine);
@@ -89,7 +92,7 @@ export function renderDigest(digest: Digest): HTMLElement {
 
   const dateLine = document.createElement("div");
   dateLine.className = "date-line";
-  dateLine.textContent = formatDate(digest.date);
+  dateLine.textContent = formatDayLong(digest.date);
   wrap.appendChild(dateLine);
 
   if (!digest.items.length) {
@@ -287,25 +290,6 @@ function emptyState(text: string): HTMLElement {
   d.className = "empty";
   d.textContent = text;
   return d;
-}
-
-function localDateKey(item: FeedItem): string {
-  const instant = item.run_started_at
-    ? new Date(item.run_started_at)
-    : new Date(item.digest_date + "T00:00:00Z");
-  const y = instant.getFullYear();
-  const m = String(instant.getMonth() + 1).padStart(2, "0");
-  const d = String(instant.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
 }
 
 function cssEscape(value: string): string {

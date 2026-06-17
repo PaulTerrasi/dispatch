@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from digest import clock
 from digest.store import Source
 
 if TYPE_CHECKING:
@@ -235,7 +236,7 @@ class S3Store:
         return result
 
     def recent_digest_items(self, days: int = 7) -> list[dict[str, str]]:
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         out: list[dict[str, str]] = []
         for d in self.list_digests():
             if d < cutoff:
@@ -271,8 +272,10 @@ class S3Store:
     def append_feedback(self, event: dict[str, Any]) -> None:
         from botocore.exceptions import ClientError
 
-        d = date.fromisoformat(event["ts"][:10]) if "ts" in event else datetime.now(UTC).date()
+        # Stamp with the current UTC instant (a caller-supplied ts wins), then
+        # bucket the object by the app-timezone calendar day of that instant.
         event = {"ts": datetime.now(UTC).isoformat(), **event}
+        d = clock.day_of(event["ts"])
         key = f"feedback/{d.isoformat()}.jsonl"
         try:
             existing = (
@@ -287,7 +290,7 @@ class S3Store:
         self._put(key, new_content, "application/x-ndjson")
 
     def read_recent_feedback(self, days: int = 30) -> list[dict[str, Any]]:
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         paginator = self.s3.get_paginator("list_objects_v2")
         keys: list[tuple[date, str]] = []
         for page in paginator.paginate(Bucket=self.bucket, Prefix="feedback/"):
@@ -322,7 +325,7 @@ class S3Store:
         from botocore.exceptions import ClientError
 
         ts = run.get("started_at") or datetime.now(UTC).isoformat()
-        d = date.fromisoformat(ts[:10])
+        d = clock.day_of(ts)
         key = f"runs/{d.isoformat()}.jsonl"
         try:
             existing = (
@@ -337,7 +340,7 @@ class S3Store:
         self._put(key, new_content, "application/x-ndjson")
 
     def read_recent_runs(self, days: int = 30) -> list[dict[str, Any]]:
-        cutoff = datetime.now(UTC).date() - timedelta(days=days)
+        cutoff = clock.today() - timedelta(days=days)
         paginator = self.s3.get_paginator("list_objects_v2")
         keys: list[tuple[date, str]] = []
         for page in paginator.paginate(Bucket=self.bucket, Prefix="runs/"):
