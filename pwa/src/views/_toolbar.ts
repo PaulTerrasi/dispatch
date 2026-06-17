@@ -77,17 +77,6 @@ export function renderChrome(
   root.appendChild(renderTabBar(active));
 }
 
-/**
- * Format today's local date as a long editorial line (e.g. "Wednesday, May 13").
- */
-export function formatTodayLong(d: Date = new Date()): string {
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
 /* Legacy adapter — some views still call renderToolbar(active). Render a
    minimal title strip so they don't break. Today and chat have been migrated
    to renderPageHeader / renderTabBar directly. */

@@ -1,5 +1,6 @@
 import { api, type SearchHit } from "../api";
 import { renderPageHeader, renderTabBar } from "./_toolbar";
+import { formatDayLong } from "../time";
 
 export async function renderArchive(): Promise<HTMLElement> {
   const root = document.createElement("div");
@@ -39,7 +40,7 @@ export async function renderArchive(): Promise<HTMLElement> {
       row.className = "archive-row";
       row.href = `#/digest/${s.date}`;
       const left = document.createElement("span");
-      left.textContent = formatDate(s.date);
+      left.textContent = formatDayLong(s.date, { year: true });
       const right = document.createElement("span");
       right.textContent = `${s.item_count} item${s.item_count === 1 ? "" : "s"}`;
       right.style.color = "var(--muted)";
@@ -89,7 +90,7 @@ function renderHit(hit: SearchHit): HTMLElement {
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.textContent = formatDate(hit.date);
+  meta.textContent = formatDayLong(hit.date, { year: true });
   a.appendChild(meta);
 
   if (hit.snippet) {
@@ -98,14 +99,4 @@ function renderHit(hit: SearchHit): HTMLElement {
     a.appendChild(p);
   }
   return a;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }

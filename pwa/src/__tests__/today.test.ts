@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderDigest, renderToday } from "../views/today";
 import type { Digest, FeedItem } from "../api";
 
@@ -164,6 +164,12 @@ describe("renderToday (feed)", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     vi.useFakeTimers();
+  });
+
+  // Restore real timers so fake timers can't leak into other suites (e.g. the
+  // SSE streaming tests in api.test.ts) when the runner shares one environment.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders feed items grouped by digest date with date headers", async () => {
@@ -335,6 +341,35 @@ describe("renderToday (feed)", () => {
     document.body.appendChild(el);
     // No exception thrown; the article renders.
     expect(document.querySelectorAll("article.item").length).toBe(2);
+  });
+
+  it("shows the app-timezone day and hour even when the run crossed UTC midnight", async () => {
+    // run_started_at is 00:30 UTC on the 17th == 8:30 PM ET on the 16th — the
+    // exact case that used to render a day off. digest_date here is the STALE
+    // UTC key a legacy digest would carry; the view must still resolve the run
+    // instant into Eastern and read June 16 (never June 15 or 17), with the run
+    // line at the Eastern hour, 8 PM.
+    const seed: FeedItem[] = [
+      {
+        ...structuredClone(FEED_SEED[0]),
+        digest_date: "2026-06-17",
+        run_started_at: "2026-06-17T00:30:00Z",
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ "/api/profile/status": { has_profile: true }, "/api/feed": seed }),
+    );
+    const el = await renderToday();
+    document.body.appendChild(el);
+
+    const dateLine = document.querySelector(".date-line") as HTMLElement;
+    expect(dateLine.textContent).toContain("June 16");
+    expect(dateLine.textContent).not.toContain("15");
+    expect(dateLine.textContent).not.toContain("17");
+    expect(dateLine.dataset.dateKey).toBe("2026-06-16");
+    const runLine = document.querySelector(".run-line") as HTMLElement;
+    expect(runLine.textContent).toBe("8 PM");
   });
 
   it("falls back to digest_date when an item has no run_started_at", async () => {

@@ -1,5 +1,6 @@
 import { api, type RunSummary } from "../api";
 import { renderPageHeader, renderTabBar } from "./_toolbar";
+import { dayKeyOf, formatDayLong, formatInstantTime } from "../time";
 
 export async function renderRuns(): Promise<HTMLElement> {
   const root = document.createElement("div");
@@ -24,7 +25,7 @@ export async function renderRuns(): Promise<HTMLElement> {
   // Group by calendar date
   const groups = new Map<string, RunSummary[]>();
   for (const run of runs) {
-    const key = run.started_at ? toDateKey(run.started_at) : run.date;
+    const key = run.started_at ? dayKeyOf(run.started_at) : run.date;
     const bucket = groups.get(key);
     if (bucket) {
       bucket.push(run);
@@ -36,7 +37,7 @@ export async function renderRuns(): Promise<HTMLElement> {
   for (const [dateKey, group] of groups) {
     const header = document.createElement("div");
     header.className = "run-group-header";
-    header.textContent = formatGroupHeader(dateKey);
+    header.textContent = formatDayLong(dateKey, { year: true });
     root.appendChild(header);
 
     for (const run of group) {
@@ -135,7 +136,7 @@ function baseCard(run: RunSummary, kind: "curation" | "reflection"): HTMLElement
 
   const timeEl = document.createElement("div");
   timeEl.className = "run-card-time";
-  timeEl.textContent = run.started_at ? formatTime(run.started_at) : "—";
+  timeEl.textContent = run.started_at ? formatInstantTime(run.started_at) : "—";
   card.appendChild(timeEl);
   return card;
 }
@@ -179,30 +180,6 @@ function errorChip(text: string): HTMLElement {
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
-}
-
-// "2026-05-10T03:02:07Z" → "2026-05-09" (when browser is in Eastern time)
-function toDateKey(iso: string): string {
-  const d = new Date(iso);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatGroupHeader(dateKey: string): string {
-  const d = new Date(dateKey + "T12:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: "numeric" });
 }
 
 function formatDuration(seconds: number): string {

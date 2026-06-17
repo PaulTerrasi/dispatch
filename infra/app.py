@@ -35,6 +35,13 @@ _SSM_NYT_COOKIES = "/morning-digest/nyt-cookies"
 # Where alarm notifications go.
 _ALERT_EMAIL = "paul.a.terrasi@gmail.com"
 
+# The application's wall-clock timezone — the single source of truth for "what
+# day is it." Used both to fire the scheduler at the top of each local hour and,
+# via the MORNING_DIGEST_TZ env var, to bucket digests/runs/feedback by the
+# local calendar day in the runtime (see digest/clock.py). Keep these in sync by
+# deriving both from this one constant.
+_APP_TIMEZONE = "America/New_York"
+
 REPO_ROOT = str(Path(__file__).parent.parent)
 
 # DockerImageAsset honors .dockerignore — keep that as the single source of truth.
@@ -128,6 +135,10 @@ class MorningDigestStack(cdk.Stack):
             "CLAUDE_CODE_OAUTH_TOKEN": _SSM_CLAUDE_TOKEN,
             "MORNING_DIGEST_AUTH_TOKEN": _SSM_AUTH_TOKEN,
             "NYT_COOKIES": _SSM_NYT_COOKIES,
+            # Day-bucketing timezone (digest/clock.py). Matches the scheduler
+            # timezone below so the curation that fires at, say, 7am local is
+            # filed under that same local day.
+            "MORNING_DIGEST_TZ": _APP_TIMEZONE,
         }
 
         # ── Lambda: FastAPI via AWS Lambda Web Adapter (uvicorn on :8080) ──
@@ -263,7 +274,7 @@ class MorningDigestStack(cdk.Stack):
             )
         )
 
-        # EventBridge Scheduler: hourly (top of every hour, America/New_York)
+        # EventBridge Scheduler: hourly (top of every hour, in _APP_TIMEZONE)
         scheduler_role = iam.Role(
             self,
             "SchedulerRole",
@@ -287,7 +298,7 @@ class MorningDigestStack(cdk.Stack):
             "DailyRunSchedule",
             name="morning-digest-hourly",
             schedule_expression="cron(0 * * * ? *)",
-            schedule_expression_timezone="America/New_York",
+            schedule_expression_timezone=_APP_TIMEZONE,
             flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(
                 mode="OFF",
             ),
