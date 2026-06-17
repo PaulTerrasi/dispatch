@@ -677,6 +677,28 @@ def test_run_date_uses_fallback_when_started_at_is_short(client: TestClient, tmp
     assert short["date"] == "2026-04-29"
 
 
+def test_run_date_falls_back_to_prefix_when_started_at_unparseable(
+    client: TestClient, tmp_data_dir: Path
+):
+    """`_run_date` tolerates a corrupt `started_at` that is long enough to slice
+    but not ISO-parseable (e.g. legacy junk): the app-timezone conversion raises
+    ValueError, so it returns the raw 10-char prefix instead of 500-ing."""
+    store = _seed_digest(tmp_data_dir)
+    data = store.read_digest(date(2026, 4, 29)) or {}
+    data["runs"] = [
+        {
+            "run_id": "bad_ts",
+            "started_at": "not-a-date-string",  # len >= 10 but not ISO → except branch
+            "duration_seconds": 1,
+        }
+    ]
+    store.rewrite_digest(date(2026, 4, 29), data)
+    r = client.get("/api/runs")
+    bad = next((row for row in r.json() if row["run_id"] == "bad_ts"), None)
+    assert bad is not None
+    assert bad["date"] == "not-a-date"  # ts[:10]
+
+
 def test_runs_excludes_duplicate_when_present_in_both_stores(
     client: TestClient, tmp_data_dir: Path
 ):
