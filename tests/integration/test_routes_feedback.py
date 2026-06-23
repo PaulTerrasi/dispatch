@@ -204,14 +204,20 @@ def test_schedule_reflection_conflict_is_noop(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_schedule_reflection_swallows_boto_errors(monkeypatch: pytest.MonkeyPatch):
-    """A non-conflict boto3 failure must be logged but not propagate — feedback
-    writes succeed regardless of whether the reflection schedule is created."""
+    """A non-conflict boto3 failure (e.g. throttling) is re-raised past the
+    ConflictException guard, then logged and swallowed by the outer handler —
+    feedback writes succeed regardless of whether the schedule is created."""
     for k, v in _REFLECT_ENV.items():
         monkeypatch.setenv(k, v)
 
+    from botocore.exceptions import ClientError
+
     class _Broken:
         def create_schedule(self, **_kwargs: Any) -> dict[str, Any]:
-            raise RuntimeError("Scheduler exploded")
+            raise ClientError(
+                {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
+                "CreateSchedule",
+            )
 
     import boto3
 
