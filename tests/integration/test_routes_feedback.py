@@ -1,9 +1,11 @@
-"""Tests for /api/feedback and /api/chat — including the `_trigger_reflection`
-ECS-task launch, which is fire-and-forget so we mock boto3 to assert behavior.
+"""Tests for /api/feedback and /api/chat — including the `_schedule_reflection`
+debounce, which creates a one-time EventBridge schedule so we mock boto3 to
+assert behavior.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from digest.store import Store
 from server.app import create_app
-from server.routes_feedback import _trigger_reflection
+from server.routes_feedback import _schedule_reflection
 
 
 @pytest.fixture
@@ -118,75 +120,110 @@ def test_feedback_value_none_clears_existing(client: TestClient, tmp_data_dir: P
     assert item["feedback"] is None
 
 
-# ── _trigger_reflection ────────────────────────────────────────────────────
+# ── _schedule_reflection ───────────────────────────────────────────────────
 
 
-def test_trigger_reflection_noop_when_env_missing(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-):
-    """Local dev (no MORNING_DIGEST_REFLECT_* envs) → logs `ecs_env_missing` and returns."""
-    for var in (
-        "MORNING_DIGEST_REFLECT_CLUSTER",
-        "MORNING_DIGEST_REFLECT_TASK_DEF",
-        "MORNING_DIGEST_REFLECT_SUBNETS",
-        "MORNING_DIGEST_S3_BUCKET",
-    ):
+_REFLECT_ENV = {
+    "MORNING_DIGEST_REFLECT_CLUSTER": "cluster-1",
+    "MORNING_DIGEST_REFLECT_TASK_DEF": "task-def-1",
+    "MORNING_DIGEST_REFLECT_SUBNETS": "subnet-a,subnet-b,",
+    "MORNING_DIGEST_S3_BUCKET": "bucket-1",
+    "MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN": "arn:aws:iam::123:role/scheduler",
+    "MORNING_DIGEST_REFLECT_SCHEDULE_NAME": "morning-digest-reflect-pending",
+}
+
+
+def test_schedule_reflection_noop_when_env_missing(monkeypatch: pytest.MonkeyPatch):
+    """Local dev (no MORNING_DIGEST_REFLECT_* envs) → logs and returns, no boto3."""
+    for var in (*_REFLECT_ENV, "MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN"):
         monkeypatch.delenv(var, raising=False)
-    # Should not raise; should not invoke boto3.
-    _trigger_reflection()
+
+    import boto3
+
+    def _boom(service: str) -> Any:  # pragma: no cover - must not be reached
+        raise AssertionError("boto3 should not be called when env is missing")
+
+    monkeypatch.setattr(boto3, "client", _boom)
+    _schedule_reflection()
 
 
-def test_trigger_reflection_calls_ecs_run_task(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_CLUSTER", "cluster-1")
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_TASK_DEF", "task-def-1")
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_SUBNETS", "subnet-a,subnet-b,")
-    monkeypatch.setenv("MORNING_DIGEST_S3_BUCKET", "bucket-1")
+def test_schedule_reflection_creates_one_time_schedule(monkeypatch: pytest.MonkeyPatch):
+    for k, v in _REFLECT_ENV.items():
+        monkeypatch.setenv(k, v)
 
     captured: dict[str, Any] = {}
 
-    class _FakeEcs:
-        def run_task(self, **kwargs: Any) -> dict[str, Any]:
+    class _FakeScheduler:
+        def create_schedule(self, **kwargs: Any) -> dict[str, Any]:
             captured.update(kwargs)
             return {}
 
     import boto3
 
-    monkeypatch.setattr(boto3, "client", lambda service: _FakeEcs())
-    _trigger_reflection()
+    monkeypatch.setattr(boto3, "client", lambda service: _FakeScheduler())
+    _schedule_reflection()
 
-    assert captured["cluster"] == "cluster-1"
-    assert captured["taskDefinition"] == "task-def-1"
-    assert captured["launchType"] == "FARGATE"
+    assert captured["Name"] == "morning-digest-reflect-pending"
+    assert captured["ScheduleExpression"].startswith("at(")
+    assert captured["ActionAfterCompletion"] == "DELETE"
+    assert captured["Target"]["RoleArn"] == "arn:aws:iam::123:role/scheduler"
+    target_input = json.loads(captured["Target"]["Input"])
+    assert target_input["Cluster"] == "cluster-1"
+    assert target_input["TaskDefinition"] == "task-def-1"
     # Empty subnet tokens are stripped.
-    assert captured["networkConfiguration"]["awsvpcConfiguration"]["subnets"] == [
+    assert target_input["NetworkConfiguration"]["AwsvpcConfiguration"]["Subnets"] == [
         "subnet-a",
         "subnet-b",
     ]
-    overrides = captured["overrides"]["containerOverrides"][0]
-    assert overrides["name"] == "Runner"
-    assert "--bucket" in overrides["command"]
-    assert "bucket-1" in overrides["command"]
+    command = target_input["Overrides"]["ContainerOverrides"][0]["Command"]
+    assert "--reflect-drain" in command
+    assert "--bucket" in command
+    assert "bucket-1" in command
 
 
-def test_trigger_reflection_swallows_boto_errors(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-):
-    """A boto3 failure must be logged but not propagate — feedback writes succeed
-    regardless of whether the reflection trigger fires."""
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_CLUSTER", "c")
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_TASK_DEF", "t")
-    monkeypatch.setenv("MORNING_DIGEST_REFLECT_SUBNETS", "s")
-    monkeypatch.setenv("MORNING_DIGEST_S3_BUCKET", "b")
+def test_schedule_reflection_conflict_is_noop(monkeypatch: pytest.MonkeyPatch):
+    """A ConflictException means the debounce window is already open — fold this
+    feedback into the pending drain instead of erroring."""
+    for k, v in _REFLECT_ENV.items():
+        monkeypatch.setenv(k, v)
+
+    from botocore.exceptions import ClientError
+
+    class _Conflict:
+        def create_schedule(self, **_kwargs: Any) -> dict[str, Any]:
+            raise ClientError(
+                {"Error": {"Code": "ConflictException", "Message": "exists"}},
+                "CreateSchedule",
+            )
+
+    import boto3
+
+    monkeypatch.setattr(boto3, "client", lambda service: _Conflict())
+    # Must not raise.
+    _schedule_reflection()
+
+
+def test_schedule_reflection_swallows_boto_errors(monkeypatch: pytest.MonkeyPatch):
+    """A non-conflict boto3 failure (e.g. throttling) is re-raised past the
+    ConflictException guard, then logged and swallowed by the outer handler —
+    feedback writes succeed regardless of whether the schedule is created."""
+    for k, v in _REFLECT_ENV.items():
+        monkeypatch.setenv(k, v)
+
+    from botocore.exceptions import ClientError
 
     class _Broken:
-        def run_task(self, **_kwargs: Any) -> dict[str, Any]:
-            raise RuntimeError("ECS exploded")
+        def create_schedule(self, **_kwargs: Any) -> dict[str, Any]:
+            raise ClientError(
+                {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
+                "CreateSchedule",
+            )
 
     import boto3
 
     monkeypatch.setattr(boto3, "client", lambda service: _Broken())
     # Must not raise.
-    _trigger_reflection()
+    _schedule_reflection()
 
 
 def test_feedback_continues_when_first_match_update_fails(
