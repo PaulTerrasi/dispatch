@@ -135,7 +135,7 @@ _REFLECT_ENV = {
 
 def test_schedule_reflection_noop_when_env_missing(monkeypatch: pytest.MonkeyPatch):
     """Local dev (no MORNING_DIGEST_REFLECT_* envs) → logs and returns, no boto3."""
-    for var in (*_REFLECT_ENV, "MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN"):
+    for var in _REFLECT_ENV:
         monkeypatch.delenv(var, raising=False)
 
     import boto3

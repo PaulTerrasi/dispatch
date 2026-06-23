@@ -315,6 +315,10 @@ class MorningDigestStack(cdk.Stack):
             iam.PolicyStatement(
                 actions=["iam:PassRole"],
                 resources=[scheduler_role.role_arn],
+                # Only allow passing the scheduler role to EventBridge Scheduler,
+                # so a future PassRole-accepting permission on this role can't
+                # hand scheduler_role to some other service.
+                conditions={"StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}},
             )
         )
 
