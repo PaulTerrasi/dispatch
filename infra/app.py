@@ -295,19 +295,17 @@ class MorningDigestStack(cdk.Stack):
             )
         )
 
-        # Let the API Lambda create/replace/delete just the one debounce
-        # schedule, and pass the scheduler role to it. Scoped to the single
-        # schedule name so the Lambda can't touch the curation schedule or any
-        # other schedule in the account.
+        # Let the API Lambda create just the one debounce schedule, and pass the
+        # scheduler role to it. _schedule_reflection only ever calls
+        # CreateSchedule — it folds concurrent feedback via ConflictException
+        # rather than reading/updating the schedule, and the schedule deletes
+        # itself via ActionAfterCompletion=DELETE (run by the Scheduler service,
+        # not the Lambda). Scoped to the single schedule name so the Lambda
+        # can't touch the curation schedule or any other schedule in the account.
         api_fn.add_environment("MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN", scheduler_role.role_arn)
         app_role.add_to_policy(
             iam.PolicyStatement(
-                actions=[
-                    "scheduler:CreateSchedule",
-                    "scheduler:UpdateSchedule",
-                    "scheduler:GetSchedule",
-                    "scheduler:DeleteSchedule",
-                ],
+                actions=["scheduler:CreateSchedule"],
                 resources=[
                     f"arn:aws:scheduler:{self.region}:{self.account}:schedule/default/{_REFLECT_SCHEDULE_NAME}"
                 ],
