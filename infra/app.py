@@ -36,11 +36,17 @@ _SSM_NYT_COOKIES = "/morning-digest/nyt-cookies"
 _ALERT_EMAIL = "paul.a.terrasi@gmail.com"
 
 # The application's wall-clock timezone — the single source of truth for "what
-# day is it." Used both to fire the scheduler at the top of each local hour and,
-# via the MORNING_DIGEST_TZ env var, to bucket digests/runs/feedback by the
-# local calendar day in the runtime (see digest/clock.py). Keep these in sync by
-# deriving both from this one constant.
+# day is it." Used both to fire the curation scheduler at the top of every third
+# local hour and, via the MORNING_DIGEST_TZ env var, to bucket digests/runs/
+# feedback by the local calendar day in the runtime (see digest/clock.py). Keep
+# these in sync by deriving both from this one constant.
 _APP_TIMEZONE = "America/New_York"
+
+# Name of the one-time EventBridge schedule the API Lambda creates to debounce a
+# burst of feedback into a single reflection drain (see server.routes_feedback).
+# Shared between the Lambda's scoped IAM grant and the env var the Lambda reads,
+# so both sides agree on which schedule the Lambda may create/replace/delete.
+_REFLECT_SCHEDULE_NAME = "morning-digest-reflect-pending"
 
 REPO_ROOT = str(Path(__file__).parent.parent)
 
@@ -258,23 +264,19 @@ class MorningDigestStack(cdk.Stack):
         )
 
         # ── Wire API Lambda so it can spawn reflection tasks on feedback ──────
+        # The Lambda doesn't launch the Fargate task directly. Instead, on
+        # feedback it creates a one-time EventBridge schedule that fires the
+        # task ~10 minutes later, debouncing a burst of feedback into a single
+        # reflection drain (see server.routes_feedback._schedule_reflection).
+        # These coordinates are baked into the schedule's RunTask target input.
         api_fn.add_environment("MORNING_DIGEST_REFLECT_CLUSTER", cluster.cluster_name)
         api_fn.add_environment("MORNING_DIGEST_REFLECT_TASK_DEF", task_def.task_definition_arn)
         api_fn.add_environment("MORNING_DIGEST_REFLECT_SUBNETS", ",".join(_DEFAULT_VPC_SUBNETS))
-        app_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["ecs:RunTask"],
-                resources=[task_def.task_definition_arn],
-            )
-        )
-        app_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["iam:PassRole"],
-                resources=[app_role.role_arn],
-            )
-        )
+        api_fn.add_environment("MORNING_DIGEST_REFLECT_SCHEDULE_NAME", _REFLECT_SCHEDULE_NAME)
 
-        # EventBridge Scheduler: hourly (top of every hour, in _APP_TIMEZONE)
+        # EventBridge Scheduler role — assumed by the scheduler service to run
+        # the Fargate task. Shared by the curation schedule (below) and the
+        # debounced reflection schedule the Lambda creates at runtime.
         scheduler_role = iam.Role(
             self,
             "SchedulerRole",
@@ -293,11 +295,38 @@ class MorningDigestStack(cdk.Stack):
             )
         )
 
+        # Let the API Lambda create/replace/delete just the one debounce
+        # schedule, and pass the scheduler role to it. Scoped to the single
+        # schedule name so the Lambda can't touch the curation schedule or any
+        # other schedule in the account.
+        api_fn.add_environment("MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN", scheduler_role.role_arn)
+        app_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "scheduler:CreateSchedule",
+                    "scheduler:UpdateSchedule",
+                    "scheduler:GetSchedule",
+                    "scheduler:DeleteSchedule",
+                ],
+                resources=[
+                    f"arn:aws:scheduler:{self.region}:{self.account}:schedule/default/{_REFLECT_SCHEDULE_NAME}"
+                ],
+            )
+        )
+        app_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[scheduler_role.role_arn],
+            )
+        )
+
         scheduler.CfnSchedule(
             self,
             "DailyRunSchedule",
-            name="morning-digest-hourly",
-            schedule_expression="cron(0 * * * ? *)",
+            name="morning-digest-every-3h",
+            # Every third local hour (00, 03, 06, ... 21). Curation runs 8x/day
+            # instead of 24x to cut Fargate cost.
+            schedule_expression="cron(0 */3 * * ? *)",
             schedule_expression_timezone=_APP_TIMEZONE,
             flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(
                 mode="OFF",
@@ -306,8 +335,9 @@ class MorningDigestStack(cdk.Stack):
                 arn="arn:aws:scheduler:::aws-sdk:ecs:runTask",
                 role_arn=scheduler_role.role_arn,
                 # AWS SDK target input must use PascalCase parameter names.
-                # Hourly run is curation-only; reflection is event-driven via the
-                # feedback API (--reflect-drain).
+                # This run is curation-plus-safety-net-drain; reflection is
+                # primarily event-driven via the feedback API, which debounces
+                # into its own one-time schedule (--reflect-drain).
                 input=cdk.Stack.of(self).to_json_string(
                     {
                         "Cluster": cluster.cluster_name,

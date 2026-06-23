@@ -1,11 +1,12 @@
-"""ECS Fargate task entry point. EventBridge Scheduler starts this container hourly.
+"""ECS Fargate task entry point. EventBridge Scheduler starts this container
+every 3 hours.
 
-The hourly invocation runs curation and then drains any pending feedback events
-into reflection runs. The drain is a safety net: feedback POSTs in the API
-Lambda also fire-and-forget an ECS task to drain immediately, but those calls
-can fail transiently (capacity, deploy-window races, Spot interruptions). The
-scheduled drain guarantees pending feedback is processed within an hour even
-if every fire-and-forget trigger fails.
+Each invocation runs curation and then drains any pending feedback events into
+reflection runs. The drain is a safety net: feedback POSTs in the API Lambda
+debounce their own one-time schedule to drain ~10 minutes later, but that can
+fail transiently (capacity, deploy-window races, Spot interruptions). The
+scheduled drain guarantees pending feedback is processed within 3 hours even
+if every debounced trigger fails.
 
 Both phases are resumable through durable S3 state (the feedback log + the
 reflection cursor + a TTL'd lock), so a SIGTERM here — e.g. a FARGATE_SPOT

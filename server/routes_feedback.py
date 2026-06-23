@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import structlog
@@ -26,37 +27,58 @@ class ChatFeedback(BaseModel):
     text: str
 
 
-def _trigger_reflection() -> None:
-    """Spawn an ECS Fargate task to run reflection. Fire-and-forget — the task
-    runs independently of this Lambda invocation. Falls back to a no-op when the
-    required env vars aren't set (local dev / tests)."""
+# How long to batch feedback before draining it into a reflection run. The
+# first feedback event opens the window; everything that arrives before it fires
+# is folded into the same drain, collapsing a burst of N feedbacks into one
+# Fargate task instead of N.
+_REFLECT_DEBOUNCE = timedelta(minutes=10)
+
+
+def _schedule_reflection() -> None:
+    """Debounce reflection behind a one-time EventBridge schedule.
+
+    The first feedback event creates a schedule that fires `--reflect-drain`
+    ~10 minutes later; feedback arriving while that window is open hits a
+    ConflictException (the schedule already exists) and is simply folded into
+    the pending drain — `reflect_drain` processes every event accumulated since
+    the reflection cursor, so nothing is lost. The schedule deletes itself after
+    it fires (ActionAfterCompletion=DELETE), so the next feedback opens a fresh
+    window. Falls back to a no-op when the required env vars aren't set (local
+    dev / tests)."""
     cluster = os.environ.get("MORNING_DIGEST_REFLECT_CLUSTER")
     task_def = os.environ.get("MORNING_DIGEST_REFLECT_TASK_DEF")
     subnets_raw = os.environ.get("MORNING_DIGEST_REFLECT_SUBNETS")
     bucket = os.environ.get("MORNING_DIGEST_S3_BUCKET")
-    if not (cluster and task_def and subnets_raw and bucket):
-        log.info("reflection.skipped", reason="ecs_env_missing")
+    role_arn = os.environ.get("MORNING_DIGEST_REFLECT_SCHEDULER_ROLE_ARN")
+    schedule_name = os.environ.get("MORNING_DIGEST_REFLECT_SCHEDULE_NAME")
+    if not (cluster and task_def and subnets_raw and bucket and role_arn and schedule_name):
+        log.info("reflection.skipped", reason="scheduler_env_missing")
         return
     subnets = [s for s in subnets_raw.split(",") if s]
-    try:
-        import boto3
-
-        client = boto3.client("ecs")
-        client.run_task(
-            cluster=cluster,
-            taskDefinition=task_def,
-            launchType="FARGATE",
-            networkConfiguration={
-                "awsvpcConfiguration": {
-                    "subnets": subnets,
-                    "assignPublicIp": "ENABLED",
+    # One-time `at()` expression in UTC; Scheduler has ~1 minute granularity,
+    # which is fine for a 10-minute debounce window.
+    fire_at = (datetime.now(UTC) + _REFLECT_DEBOUNCE).strftime("%Y-%m-%dT%H:%M:%S")
+    # PascalCase: this is the input to the ECS RunTask SDK call the universal
+    # target makes. FARGATE_SPOT mirrors the curation schedule to keep cost low.
+    target_input = json.dumps(
+        {
+            "Cluster": cluster,
+            "TaskDefinition": task_def,
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "Subnets": subnets,
+                    "AssignPublicIp": "ENABLED",
                 }
             },
-            overrides={
-                "containerOverrides": [
+            "CapacityProviderStrategy": [
+                {"CapacityProvider": "FARGATE_SPOT", "Weight": 1},
+                {"CapacityProvider": "FARGATE", "Weight": 0, "Base": 0},
+            ],
+            "Overrides": {
+                "ContainerOverrides": [
                     {
-                        "name": "Runner",
-                        "command": [
+                        "Name": "Runner",
+                        "Command": [
                             "python",
                             "-m",
                             "digest.runner",
@@ -67,11 +89,39 @@ def _trigger_reflection() -> None:
                     }
                 ]
             },
-            startedBy="feedback-reflection",
-        )
-        log.info("reflection.triggered", cluster=cluster)
+        }
+    )
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        client = boto3.client("scheduler")
+        try:
+            client.create_schedule(
+                Name=schedule_name,
+                ScheduleExpression=f"at({fire_at})",
+                ScheduleExpressionTimezone="UTC",
+                FlexibleTimeWindow={"Mode": "OFF"},
+                ActionAfterCompletion="DELETE",
+                Target={
+                    "Arn": "arn:aws:scheduler:::aws-sdk:ecs:runTask",
+                    "RoleArn": role_arn,
+                    "Input": target_input,
+                    "RetryPolicy": {
+                        "MaximumRetryAttempts": 2,
+                        "MaximumEventAgeInSeconds": 600,
+                    },
+                },
+            )
+            log.info("reflection.window_opened", fire_at=fire_at)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") == "ConflictException":
+                # A window is already open — this feedback rides along with it.
+                log.info("reflection.window_already_open")
+            else:
+                raise
     except Exception:
-        log.exception("reflection.trigger_failed")
+        log.exception("reflection.schedule_failed")
 
 
 @router.post("/feedback")
@@ -97,7 +147,7 @@ def post_feedback(store: StoreDep, body: ThumbFeedback) -> dict[str, str]:
     if body.notes:
         event["notes"] = body.notes
     store.append_feedback(event)
-    _trigger_reflection()
+    _schedule_reflection()
     return {"status": "ok"}
 
 
@@ -107,5 +157,5 @@ def post_chat(store: StoreDep, body: ChatFeedback) -> dict[str, str]:
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
     store.append_feedback({"kind": "chat", "text": text})
-    _trigger_reflection()
+    _schedule_reflection()
     return {"status": "ok"}
